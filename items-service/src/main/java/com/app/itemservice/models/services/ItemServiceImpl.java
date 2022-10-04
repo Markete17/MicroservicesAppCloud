@@ -25,7 +25,12 @@ public class ItemServiceImpl implements ItemService {
 	
 	@Override
 	public List<Item> findAll() {
-		List<Product> products = Arrays.asList(this.restClient.getForObject("http://localhost:8001/products", Product[].class));
+		// Al usar RestTemplate con balanceo de carga, ya no es necesario indicar la URL ya que Ribbon elegirá el puerto mejor disponible
+		
+		//List<Product> products = Arrays.asList(this.restClient.getForObject("http://localhost:8001/products", Product[].class));
+		
+		// Ahora hay que elegir el servicio
+		List<Product> products = Arrays.asList(this.restClient.getForObject("http://products-service/products", Product[].class));
 		return products.stream().map(
 				p -> new Item(p,1)
 				).collect(Collectors.toList());
@@ -35,7 +40,11 @@ public class ItemServiceImpl implements ItemService {
 	public Item findById(Long id, Integer quantity) {
 		Map<String, String> pathVariablesMap = new HashMap<>();
 		pathVariablesMap.put("id", id.toString());
-		Product product = this.restClient.getForObject("http://localhost:8001/products/{id}", Product.class, pathVariablesMap);
+		
+		//Mismo motivo que en findAll
+		//Product product = this.restClient.getForObject("http://localhost:8001/products/{id}", Product.class, pathVariablesMap);
+		Product product = this.restClient.getForObject("http://products-service/products/{id}", Product.class, pathVariablesMap);
+		
 		return new Item(product,quantity);
 	}
 

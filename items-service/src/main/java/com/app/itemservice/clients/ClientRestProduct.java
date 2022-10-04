@@ -9,7 +9,8 @@ import org.springframework.web.bind.annotation.PathVariable;
 
 import com.app.itemservice.models.Product;
 
-@FeignClient(name = "products-service", url = "localhost:8001")
+//@FeignClient(name = "products-service", url = "localhost:8001") Configurar con Ribbon
+@FeignClient(name = "products-service")
 public interface ClientRestProduct {
 	
 	@GetMapping("/products")

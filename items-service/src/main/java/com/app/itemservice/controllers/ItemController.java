@@ -19,7 +19,8 @@ import com.app.itemservice.models.services.ItemService;
 public class ItemController {
 	
 	@Autowired
-	@Qualifier("serviceFeign")
+	@Qualifier("serviceFeign") //Usando Feign
+	//@Qualifier("serviceRestTemplate") //Usando Rest Template
 	private ItemService itemService;
 	
 	@GetMapping

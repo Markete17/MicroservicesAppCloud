@@ -12,6 +12,7 @@ import javax.persistence.Id;
 import javax.persistence.Table;
 import javax.persistence.Temporal;
 import javax.persistence.TemporalType;
+import javax.persistence.Transient;
 
 import org.springframework.data.annotation.CreatedDate;
 import org.springframework.data.jpa.domain.support.AuditingEntityListener;
@@ -35,6 +36,9 @@ public class Product implements Serializable {
 	@Temporal(TemporalType.DATE)
 	@CreatedDate
 	private Date createAt;
+	
+	@Transient //Indica que este dato no es persistente y no se va a mapear a la base de datos
+	private Integer port;
 
 	public Long getId() {
 		return id;
@@ -66,5 +70,13 @@ public class Product implements Serializable {
 
 	public void setCreateAt(Date createAt) {
 		this.createAt = createAt;
+	}
+
+	public Integer getPort() {
+		return port;
+	}
+
+	public void setPort(Integer port) {
+		this.port = port;
 	}
 }
