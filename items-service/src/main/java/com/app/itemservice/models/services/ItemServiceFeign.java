@@ -4,6 +4,7 @@ import java.util.List;
 import java.util.stream.Collectors;
 
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
 
 import com.app.itemservice.clients.ClientRestProduct;
@@ -20,9 +21,13 @@ public class ItemServiceFeign implements ItemService {
 
 	@Override
 	public List<Item> findAll() {
+		System.out.println("AQUI");
+		ResponseEntity<List<Product>> response = this.clientRestProduct.getAllProducts();
+		System.out.println(response);
 		return this.clientRestProduct.getAllProducts().getBody().stream().map(
 				p -> new Item(p,1)
 				).collect(Collectors.toList());
+		
 	}
 
 	@Override
