@@ -182,16 +182,16 @@ Zuul NO es disponible para versiones >=2.4
 
 - Configurar el properties del proyecto. Añadiendo la configuración de cliente Eureka y las rutas zuul:
 <pre>
-# Configuración Eureka
+- Configuración Eureka
 eureka.client.service-url.defaultZone = http://localhost:8761/eureka
 
-# Configurar las rutas de los microservicios
+### Configurar las rutas de los microservicios
 
-## Products
+#### Products
 zuul.routes.products.service-id=products-service
 zuul.routes.products.path=/api/products/**
 
-## Items
+#### Items
 zuul.routes.items.service-id=items-service
 zuul.routes.items.path=/api/items/**
 </pre>
@@ -200,3 +200,47 @@ zuul.routes.items.path=/api/items/**
 - Al hacer las peticiones, es necesario hacerlas en el puerto de zuul (8090 o el que se haya asignado)
 
 
+### Zuul Filtros HTTP
+Hay tres tipos de filtros en zuul: 
+1. <b>PRE: </b>Se ejecuta antes de que la request sea enrutada. Principalmente en este filtro se utiliza para asignar datos, atributos para usarlo en los otros filtros. Para pasar los datos al request.
+2. <b>POST: </b>Se ejecuta después de que la request haya sido enrutada. Se usa para modificar la respuesta
+3. <b>ROUTE: </b>Se ejecuta durante el enrutado de la request. Aquí se resuelve la ruta. Se usa para la comunicación con el microservicio. Utiliza por defecto RibbonRoutingFilter que utiliza Ribbon y Hystrix.
+
+
+1. Configurar filtro PRE
+Crear un package en el proyecto zuul-server que se llame filters para incorporar estos 3 filtros.
+Crear una clase en este paquete @Component PreTimeElapsedFilter.class extends ZuulFilter (Pre tiempo transcurrido Filter).
+Implementar los métodos @Override:
+- shouldFilter(): para validar si se ejecuta el método run o no
+- run(): aqui va la lógica del filtro. Por ejemplo, obtener el tiempo de inicio y meterlo en la request.
+- filterType() -> siempre va a devolver return "pre" porque es de tipo PRE
+- filterOrder() -> por defecto, return 1
+
+2. Configurar filtro POST
+Crear una clase en este paquete @Component PostTimeElapsedFilter.class extends ZuulFilter (Pre tiempo transcurrido Filter).
+Implementar los métodos @Override:
+- shouldFilter(): para validar si se ejecuta el método run o no
+- run(): aqui va la lógica del filtro. Por ejemplo, tomar el tiempo de inicio iniciado en PRE,  tomar el final y calcular el tiempo transcurrido y mostrarlo por consola.
+- filterType() -> siempre va a devolver return "post" porque es de tipo PRO
+- filterOrder() -> por defecto, return 1
+
+Lo implementado en el run, se podrá ver por la consola. Para ello, ir al BootDashboard de spring, seleccionar el proyecto zuul-server click derecho y open console. Aquí indicará lo implementado (ver clases en zuul-server project.
+<pre>
+c.a.z.filters.PostTimeElapsedFilter : Enter to POST
+c.a.z.filters.PostTimeElapsedFilter : Time elapsed: 0.548 seconds.
+c.a.z.filters.PostTimeElapsedFilter : Time elapsed: 0.548 ms.
+</pre>
+
+### Zuul Configurar TimeOuts
+Con la configuración Hystrix anterior, en zuul no vale. Es necesario configurar los timeouts en Zuul con las nuevas rutas.
+Con la configuración anterior (HystrixCommand + lo del properties) para zuul sigue siendo un Timeout -> error: Gateway Timeout.
+
+Para ello, se copia la configuración de Hystrix y se copia tanto en items-service como en zuul-service (ambos)
+<pre>
+hystrix.command.default.execution.isolation.thread.timeoutInMilliseconds: 10000
+ribbon.ConnectTimeout: 3000
+ribbon.ReadTimeout: 60000
+</pre>
+
+Cabe indicar que si solo se pone en zuul-server y se descomenta en item-server, no va a esperar y entrará en la ruta alternativa.
+Por eso, es necesario ponerlo en ambos proyectos para que espere los 2 segundos y ejecute el método original y no el alternativo.

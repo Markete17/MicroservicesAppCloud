@@ -52,12 +52,12 @@ public class ProductController {
 			 * RuntimeException("Cannot load this product."); }
 			 */
 
-			/** Para testear Timeout con Hystrix **/
-
-			/*
+			/** Para testear Timeout con Hystrix - Para esto es necesario configurarlo en el properties de item-service y si se usa Zuul Gateway tambien en sus properties **/
+			 /*
 			 try { Thread.sleep(2000L); } catch (InterruptedException e) {
 			 e.printStackTrace(); }
 			 */
+			 
 
 			return new ResponseEntity<>(product, HttpStatus.OK);
 		} else {
