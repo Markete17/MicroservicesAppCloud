@@ -1,0 +1,57 @@
+eureka:
+  client:
+    service-url:
+      defaultZone: http://localhost:8761/eureka
+server:
+  port: 8002
+spring:
+  application:
+    name: items-service
+
+# Timeouts con Hystrix (se comenta porque se usa Resillence4J)
+# Para los Timeouts, es necesario configurar los timpos de respuesta de Hystrix y Ribbon:
+# Importante! (Al agregar Zuul como API gateway, esta configuración va aquí y en zuul-server)
+
+## hystrix.command.default.execution.isolation.thread.timeoutInMilliseconds: 10000
+## ribbon.ConnectTimeout: 3000
+## ribbon.ReadTimeout: 60000
+
+# Ribbon Configuration (comentado porque Eureka lo lleva integrado)
+# products-service.ribbon.listOfServers = localhost:8001,localhost:9001
+
+
+# Configuración Resilience4J
+
+resilience4j:
+  circuitbreaker:
+    configs:
+      defaultConfigItems:
+        sliding-window-size: 6
+        failure-rate-threshold: 50
+        wait-duration-in-open-state: 20s
+        permitted-number-of-calls-in-half-open-state: 4
+        slow-call-rate-threshold: 50
+        slow-call-duration-threshold: 2s
+    instances:
+      items:
+        base-config: defaultConfigItems
+  ## Configurar Timeout
+  timelimiter:
+    configs:
+     defaultConfigItemsTimeout:
+        timeout-duration: 2s
+    instances:
+      items:
+        base-config: defaultConfigItemsTimeout
+        
+ # Configuracion con properties       
+#resilience4j.circuitbreaker.configs.defaultConfigItems.sliding-window-size=6
+#resilience4j.circuitbreaker.configs.defaultConfigItems.failure-rate-threshold=50
+#resilience4j.circuitbreaker.configs.defaultConfigItems.wait-duration-in-open-state=20s
+#resilience4j.circuitbreaker.configs.defaultConfigItems.permitted-number-of-calls-in-half-open-state=4
+#resilience4j.circuitbreaker.configs.defaultConfigItems.slow-call-rate-threshold=50
+#resilience4j.circuitbreaker.configs.defaultConfigItems.slow-call-duration-threshold=2s
+#resilience4j.circuitbreaker.instances.items.base-config=defaultConfigItems
+ 
+#resilience4j.timelimiter.configs.defaultConfigItemsTimeout.timeout-duration=2s
+#resilience4j.timelimiter.instances.items.base-config=defaultConfigItemsTimeout

@@ -244,3 +244,507 @@ ribbon.ReadTimeout: 60000
 
 Cabe indicar que si solo se pone en zuul-server y se descomenta en item-server, no va a esperar y entrará en la ruta alternativa.
 Por eso, es necesario ponerlo en ambos proyectos para que espere los 2 segundos y ejecute el método original y no el alternativo.
+
+## Spring Cloud API Gateway (Alternativa a Zuul)
+ Viene a reemplazar Zuul. Es un servidor de enrutamiento dinámico con filtros, seguridad, autorización, etc.
+ 
+ - Existen dos Gateway: Zuul Netflix (mantenimiento pero aún se usa) y Spring Cloud Gateway (se recomienda y se usa para programación reactiva)
+ - Puerta de enlace, acceso centralizado
+ - Enrutamiento dinámico de los microservicios
+ - Balanceo de carga (Ribbon o Load Balancer)
+ - Maneja filtros propios
+ - Permite extender funcionalidades,crear propios filtros.
+ - En el API Gateway se implementa la seguridad y así no hace falta implementar la seguridad en todos los microservicios.
+ 
+ Se crea un nuevo proyecto y se añaden las dependencias <b>Eureka Client, DevTools y Gateway.</b>
+ Al igual que Zuul, se pueden configurar las rutas de los microservicios. Se puede hacer tanto en el archivo
+ properties como en uno nuevo .yml. En este ejemplo se va a crear un nuevo archivo yml.
+ 
+ <pre>
+ spring:
+  application:
+    name: gateway-service-server
+  cloud:
+    gateway:
+      routes:
+      # PRODUCTS
+      - id: products-service
+        ## Lb para incorporar LoadBalancer (balanceo de carga)
+        uri: lb://products-service
+        predicates:
+          - Path=/api/products/**
+        filters:
+          ## Esto porque está formado por 2 prefijos /api/products
+          - StripPrefix=2
+      # ITEMS
+      - id: items-service
+        uri: lb://items-service
+        predicates:
+          - Path=/api/items/**
+        filters:
+          - StripPrefix=2
+server:
+  port: 8090
+  
+eureka:
+  client:
+    service-url:
+      defaultZone: http://localhost:8761/eureka
+ </pre>
+ 
+ Con un archivo properties:
+ <pre>
+ ## Configuracion con properties
+
+spring.application.name=zuul-service-server
+server.port=8090
+
+# Configuración Eureka
+eureka.client.service-url.defaultZone = http://localhost:8761/eureka
+
+#Configuración Spring API Gateway
+spring.cloud.gateway.routes[0].id=products-service
+spring.cloud.gateway.routes[0].uri=lb://products-service
+spring.cloud.gateway.routes[0].predicates=Path=/api/products/**
+spring.cloud.gateway.routes[0].filters=StripPrefix=2
+ 
+spring.cloud.gateway.routes[1].id=items-service
+spring.cloud.gateway.routes[1].uri=lb://items-service
+spring.cloud.gateway.routes[1].predicates=Path=/api/items/**
+spring.cloud.gateway.routes[1].filters=StripPrefix=2
+ </pre>
+ 
+ <b>Con esto, se estaría usando Spring API Gateway en vez de Zuul. Tiene una configuración similar y la diferencia es que con Spring Gateway no se tiene que poner 
+ ninguna anotación en la clase app run y con Zuul se tiene que poner la anotación @EnableZuulProxy.
+ Además, Spring Gateway al igual que Zuul, tiene balanceo de carga de manera implícita.
+ </b>
+ 
+ ### Filtros con Spring Cloud Gateway
+ Cada request que pase por el Spring Cloud Gateway se van a ejecutar estos filtros. Al igual que Zuul, puede tener filtros PRE,POST y ROUTE.
+ - Crear un paquete llamado filters dentro del paquete principal.
+ - Se crea una clase de ejemplo de filter llamado @Component GlobalFilterExample implements GlobalFilter. Y se implementan
+ el método Override filter.
+ - Para implementar el filtro PRE y POST en el método filter, se necesita programación reactiva con la función then. (Ver clase  GlobalFilterExample)
+ 
+ <pre>
+ 	@Override
+	public Mono<Void> filter(ServerWebExchange exchange, GatewayFilterChain chain) {
+		
+		//Lo de antes del return es el filter PRE y lo de después del den es el filtro POST
+		logger.info("Execute PRE Filter");
+		
+		
+ 		return chain.filter(exchange).then(Mono.fromRunnable(() ->{
+			logger.info("Execute POST Filter");
+			// Ejemplo para añadir una cookie a la respuesta
+			exchange.getResponse().getCookies().add("color", ResponseCookie.from("color", "red").build());
+			// Ejemplo para transformar la respuesta en Texto plano
+			exchange.getResponse().getHeaders().setContentType(MediaType.TEXT_PLAIN);
+		}));
+	}
+ </pre>
+ 
+ Modificando la respuesta es sencillo pero para modificar la request tiene algunas restricciones.
+ Se necesita usar la función mutable para hacer la request modificable y con la función headers se pueden añadir tokens al header.
+ <pre>
+ 		/*MODIFICAR LA REQUEST*/
+		exchange.getRequest().mutate().headers(h -> {
+			h.add("token", "123456");
+		});
+ </pre>
+ En el POST, se puede modificar esta request que se editó en el PRE:
+ <pre>
+ 			Optional.ofNullable(exchange.getRequest().getHeaders().getFirst("token"))
+			.ifPresent(value -> exchange.getResponse().getHeaders().add("token", value));
+ </pre>
+ 
+ Para aplicar un orden a las clases que implementan filtros es necesario que la clase @Component GlobalFilterExample implements Order
+ e implementar el método Override getOrder().
+ 
+ <pre>
+ 	@Override
+	public int getOrder() {
+		return 1;
+	}
+ </pre>
+ 
+ ### Gateway Filter Factory
+ Otra manera de crear filtros mucho más personalizable.
+ - Crear un nuevo packete dentro de filters llamado filters.factory.
+ - Crear la clase pero no con un nombre cualquiera: <Name>GatewayFilterFactory por ejemplo, 
+ @Component ExampleGatewayFilterFactory extends AbstractGatewayFilterFactory<ExampleGatewayFilterFactory.ConfigurationFilter>
+ - Como se comprueba, maneja un genérico como clase de configuración que hay que crearlo como clase interna:
+ <pre>
+ @Component
+public class ExampleGatewayFilterFactory extends AbstractGatewayFilterFactory<ExampleGatewayFilterFactory.ConfigurationFilter> {
+
+	public class ConfigurationFilter {
+
+	}
+}
+ </pre>
+ - Implementar el método Override apply(), es decir, aplicar el filtro con la clase de configuración personalizada.
+ Es igual que el otro pero mucho más configurable porque las propiedades son dinámicas:
+ <pre>
+ 	@Override
+	public GatewayFilter apply(ConfigurationFilter config) {
+		
+		//** ZONA PRE **\\
+
+		logger.info("Execute PRE in filter factory: "+config.message);
+		
+		return (exchange,chain) ->{
+			return chain.filter(exchange).then(Mono.fromRunnable(() ->{
+				
+				//** ZONA POST **\\
+				logger.info("Execute POST in filter factory: "+config.message);
+				
+				Optional.ofNullable(config.cookieValue).ifPresent(cookie ->{
+					exchange.getResponse().addCookie(ResponseCookie.from(config.cookieName, cookie).build());
+				});
+			}));
+		};
+	}
+ </pre>
+ 
+ - Es mucho más configurables porque en el properties o yml, se puede añadir estos filtros. Por ejemplo,
+ si solo se quiere que esto se ejecute para el microservicio products, se pone en el properties del products y en items no.
+ Es necesario que en el name se ponga el prefijo que se ha puesto en <name>GatewayFilterFactory y en args, los argumentos 
+ de la clase interna ESTÁTICA de configuración. <b>Para que funcione y se vincule correctamente es necesario que la clase interna de configuración sea estática y que implemente los getters & setters (ver clase Configuration)</b>
+ <pre>
+         filters:
+          - StripPrefix=2
+          - name: Example
+            args:
+              message: "Hello! This is a message"
+              cookieName: "user"
+              cookieValue: "Marcos"
+ </pre>
+ También se puede poner de forma compacta:
+ <pre>
+         filters:
+          - StripPrefix=2
+          - Cookie=Custom message!, user, Marcos
+ </pre>
+ Pero para este ejemplo último, se necesita añadir el orden de los objetos y el nombre de la clase. Es decir, implementar los métodos override:
+ <pre>
+ 	@Override
+	public String name() {
+		return "Cookie";
+	}
+
+	@Override
+	public List<String> shortcutFieldOrder() {
+		return Arrays.asList("message", "cookieName", "cookieValue");
+	}
+ </pre>
+ 
+ ### Filtros de fábrica en Spring Cloud Gateway
+ Estos son algunos filtros que se usan de fábrica en Spring Gateway y que se pueden añadir directamente al archivo properties:
+ - AddRequestHeader-> para modificar la cabecera o añadir parámetros no existentes de la request. Ej: - AddRequestHeader=token-request, 123456
+ - AddResponseHeader-> para modificar la cabecera o añadir parámetros no existentes de la response. Ej:  - AddResponseHeader=token-response, 12345678
+ - AddRequestParameter-> Se añade un parámetro a la request. Ej: AddRequestParameter=name, Marcos
+ 
+  Luego estos parámetros se pueden usar en un controller
+ 
+ <pre>
+ 	@GetMapping
+	public ResponseEntity<List<Item>> getAllItems(@RequestParam(name = "name",required = false) String name, @RequestHeader(name = "token-request",required = false) String token) {
+		System.out.println("Name: "+name);
+		System.out.println("Token: "+token);
+		return new ResponseEntity<>(this.itemService.findAll(), HttpStatus.OK);
+	}
+ </pre>
+ 
+ - Para modificar se usa el prefijo Set y se usa para parámetros ya existentes de las cabeceras. Ej: - SetResponseHeader=Content-Type, text/plain
+ - Todos los filtros de fábrica se encuentran en: https://docs.spring.io/spring-cloud-gateway/docs/current/reference/html/#gatewayfilter-factories
+ 
+ 
+ ### Predicates de fábrica en Spring Cloud Gateway
+ Los predicates son reglas del request. Por ejemplo, la regla Path que para ejecutarse cierto microservicio, necesita que tenga una ruta específica difinida en Path.
+ <pre>
+         predicates:
+          - Path=/api/products/**
+ </pre>
+ <b>Pero hay muchos más:</b>
+ 
+ <pre>
+        predicates:
+          - Path=/api/products/**
+          # Que el header lleve un parámetro token y tiene que ser un digito(marcado con \d+)
+          - Header= token, \d+ 
+          #- Header= Content-Type,application/json 
+          # Que solo permitan GET y POST
+          - Method=GET, POST
+          # Envia una Query? en la url con el parámetro color y valor verde
+          # - Query=color, green para un color en específico
+          - Query=color
+          # Envia cookies al ejecutar esta URL
+          - Cookie=color, blue
+ </pre>
+ 
+ Si no se cumplen todas estas reglas, da el siguiente error: 404 Not Found.
+ Hay muchos más predicates que se pueden encontrar en: https://docs.spring.io/spring-cloud-gateway/docs/current/reference/html/#gateway-request-predicates-factories
+ 
+## Resilence4J Circuit Breaker
+Viene a reemplazar a Hystrix. Muchas veces en un ecosistema de microservicios la comunicación puede fallar, puede que tarde demasiado en responder
+o que el servicio arroje aguna excepción o simplemente que el servicio no esté en disponible.
+La solución es implementar el patrón Circuit Breaker con Resilence4J.
+
+Resilence4J es una librería para trabajar la resilencia y tolerancia a fallos e implementa el patrón cortocircuito, diseñada con programación funcional.
+Estados del Circuit Breaker:
+1. Cerrado: cuando no hay fallos.
+2. Abierto. Cuando la tasa de fallos/tiempo de espera están por encima del umbral.
+3. Semi abierto: Se hacen pruebas aqui y después de un tiempo de espera si la tasa de fallas está por encima del umbral vuelve a abierto y sino sigue al estado cerrado.
+
+Parámetros del Circuit Breaker (POR DEFECTO):
+- slidingWindowSize(100) -> muestreo estádistico con 100 pruebas y si es mayor al umbral, cortocircuito
+- failureRateThreshold(50) -> porcentaje de fallas. Si de 100 pruebas fallan 50, cortocircuito
+- waitDurationInOpenState(60000ms) -> tiempo que pertenece en abierto y no recibe más peticiones
+- permittedNumberOfCallsInHalfOpenState(10) -> nº peticiones de prueba permitido de llamadas en estado semi abierto.
+- slowCallRateThreshold(100) -> si de 100 llamadas, las 100 son lentas -> cortocircuito
+- slowCallDurationThreshold(60000) -> si se tarda más de 1 minuto -> cortocircuito
+
+Para usar Resilence4J, lo primero actualizar el pom.xml a la ultima versión de Spring y Spring cloud ya que Hystrix usaba Spring<=2.3.
+<pre>
+	<!-- Para usar Hystrix
+	<version>2.3.0.RELEASE</version>-->
+	<version>2.7.4</version>
+		
+	<properties>
+		<java.version>11</java.version>
+		<!--Para usar Hystrix
+		<spring-cloud.version>Hoxton.SR12</spring-cloud.version>-->
+		<spring-cloud.version>2021.0.4</spring-cloud.version>
+	</properties>
+</pre>
+
+Y en la clase principal, quitar el @EnableCircuitBreaker que usaba Hystrix:
+<pre>
+//@EnableCircuitBreaker // Para usar Hystrix para la tolerancia a fallos y timeouts
+</pre>
+
+Ahora solo falta añadir las dependencias.
+<pre>
+		<dependency>
+			<groupId>org.springframework.cloud</groupId>
+			<artifactId>spring-cloud-starter-bootstrap</artifactId>
+		</dependency>
+		<dependency>
+			<groupId>org.springframework.cloud</groupId>
+			<artifactId>spring-cloud-starter-circuitbreaker-resilience4j</artifactId>
+		</dependency>
+</pre>
+
+Spring Cloud boostrap no tiene nada que ver con Resilence4J pero
+se usará para implementar un archivo de configuración y añadir el parámetro en properties.
+
+<pre>
+spring.config.import=optional:configserver:
+</pre>
+
+Ahora para cualquier Controller, se puede usar el objeto @Autowired private CircuitBreakerFactory circuitBreakerFactory;
+en alguna requestmapping y además a la vez poner el método alternativo.
+<pre>
+	@GetMapping("/{id}/quantity/{quantity}")
+	public ResponseEntity<Item> getItem(@PathVariable Long id, @PathVariable Integer quantity) {
+		/**Probar Resilence4j**/
+		return circuitBreakerFactory.create("items").run(() ->new ResponseEntity<Item>(this.itemService.findById(id, quantity), HttpStatus.OK),e -> alternativeMethod(id, quantity,e));
+	}
+</pre>
+
+Con el circuitbreaker y los parámetros por defecto. De 100 peticiones, si por ejemplo se hacen 55 peticiones erroneas a esta URL y 45 peticiones correctas, superará el umbral y entrará en estado cerradao.
+Aquí aunque se realicen peticiones correctas, irá al método alternativo. Estára el estado semiabierto realizando con 10 pruebas de límite. Si supera el umbral del 50% de fallos, volverá al estado abierto, sino al cerrado.
+
+### Cambiar parámetros que vienen por defecto del CircuitBreaker de Resillence4J
+Existen dos formas, mediante el properties o mediante una clase Bean.
+
+1. Mediante una clase Bean en un @Configuration
+	<pre>
+	@Configuration public class AppConfig
+	
+	@Bean
+	public Customizer<Resilience4JCircuitBreakerFactory> defaultCustomizer(){
+		return factory -> factory.configureDefault(id->{
+			return new Resilience4JConfigBuilder(id)
+					.circuitBreakerConfig(CircuitBreakerConfig.custom()
+							.slidingWindowSize(10) //por defecto es 100
+							.failureRateThreshold(50) //por defecto es 50% tambien
+							.waitDurationInOpenState(Duration.ofSeconds(10)) // por defecto es 60000ms
+							.permittedNumberOfCallsInHalfOpenState(5) //por defecto son 10
+							.build()) //si no es customizado no se necesita el build
+					/*TIMEOUTS por defecto*/
+					.timeLimiterConfig(TimeLimiterConfig.ofDefaults())
+					.build();
+		});
+	}
+	</pre>
+	
+#### Timeouts con Resilence4J
+Se puede configurar también en el customizer la propiedad timeLimiterConfig(TimeLimiterConfig.ofDefaults()) pero en vez de que sea por defecto,
+personalizarla:
+<pre>
+					.timeLimiterConfig(TimeLimiterConfig.custom()
+							.timeoutDuration(Duration.ofSeconds(6L)) /*6 segundos se demora (por defecto es 1)*/
+							.build())
+</pre>
+
+#### Llamadas lentas con Resilence4J
+Se configura también en el customizer de la propiedad circuitBreakerConfig.
+<pre>
+		.slowCallRateThreshold(50)//por defecto es 100%
+		.slowCallDurationThreshold(Duration.ofSeconds(2L)) //por defecto 60000ms
+</pre>
+Ahora toda llamada mayor de 2 seg se registra como llamada lenta.
+Cabe destacar que primero ocurre el timeout antes que la llamada lenta por lo que el tiempo de la llamada lenta tendra que ser menor.
+A diferencia de los timeouts, estas llamadas lentas se van a ejecutar como 200 OK pero se registará como llamada lenta que si se supera el 50% del umbral establecido, entrara en cortocircuito.
+
+2. Modificando el application.properties
+
+Se crea un nombre de configuracion y se le asigna a la instancia creada en el circuitBreakerFactory (return circuitBreakerFactory.create("items").run(()) en este caso para items.
+
+<pre>
+resilience4j:
+  circuitbreaker:
+    configs:
+      defaultConfigItems:
+        sliding-window-size: 6
+        failure-rate-threshold: 50
+        wait-duration-in-open-state: 20s
+        permitted-number-of-calls-in-half-open-state: 4
+        slow-call-rate-threshold: 50
+        slow-call-duration-threshold: 2s
+    instances:
+      items:
+        base-config: defaultConfigItems
+  ## Configurar Timeout
+  timelimiter:
+    configs:
+     defaultConfigItemsTimeout:
+        timeout-duration: 6s
+    instances:
+      items:
+        base-config: defaultConfigItemsTimeout
+</pre>
+
+en properties:
+
+<pre>
+resilience4j.circuitbreaker.configs.defaultConfigItems.sliding-window-size=6
+resilience4j.circuitbreaker.configs.defaultConfigItems.failure-rate-threshold=50
+resilience4j.circuitbreaker.configs.defaultConfigItems.wait-duration-in-open-state=20s
+resilience4j.circuitbreaker.configs.defaultConfigItems.permitted-number-of-calls-in-half-open-state=4
+resilience4j.circuitbreaker.configs.defaultConfigItems.slow-call-rate-threshold=50
+resilience4j.circuitbreaker.configs.defaultConfigItems.slow-call-duration-threshold=2s
+resilience4j.circuitbreaker.instances.items.base-config=defaultConfigItems
+ 
+resilience4j.timelimiter.configs.defaultConfigItemsTimeout.timeout-duration=2s
+resilience4j.timelimiter.instances.items.base-config=defaultConfigItemsTimeout
+</pre>
+
+### Anotacion @CircuitBreaker
+En vez de usar circuitBreakerFactory se puede usar la anotacion encima del método del controller.
+
+<pre>
+	@CircuitBreaker(name = "items",fallbackMethod = "alternativeMethod")
+	@GetMapping("/aux/{id}/quantity/{quantity}")
+	public ResponseEntity<Item> getItem2(@PathVariable Long id, @PathVariable Integer quantity) {
+		return new ResponseEntity<Item>(this.itemService.findById(id, quantity), HttpStatus.OK);
+	}
+</pre>
+
+Esta configuración de "items" tiene que estar en el archivo properties
+
+### Anotacion @TimeLimiter
+La funcionalidad es la misma al @CircuitBreaker. Aqui la diferencia es que continua con la ejecución y no hace cortocircuito porque no contabiliza los tiempos ni los estados.
+Solo contabiliza los timeouts y en CircuitBreakers se contabilizan las excepciones y llamadas lentas.
+Llamada futura asincrona. Cabe destacar que el método alternativo tambien tiene que devolver un CompletableFuture.
+
+<pre>
+	@TimeLimiter(name = "items",fallbackMethod = "alternativeMethod2")
+	@GetMapping("/aux2/{id}/quantity/{quantity}")
+	public CompletableFuture<ResponseEntity<Item>> getItem3(@PathVariable Long id, @PathVariable Integer quantity) {
+		return CompletableFuture.supplyAsync(() -> new ResponseEntity<Item>(this.itemService.findById(id, quantity), HttpStatus.OK));
+	}
+</pre>
+
+También se puede combinar con @CircuitBreaker pero si se combina es necesario quitar el fallbackMethod del TimeLimiter para que el CircuitBreaker haga la toleracion de fallos.
+<pre>
+	@TimeLimiter(name = "items")//,fallbackMethod = "alternativeMethod2")
+	@CircuitBreaker(name = "items",fallbackMethod = "alternativeMethod2") //se puede quitar o combinar con TimeLimiter
+	@GetMapping("/aux2/{id}/quantity/{quantity}")
+	public CompletableFuture<ResponseEntity<Item>> getItem3(@PathVariable Long id, @PathVariable Integer quantity) {
+		return CompletableFuture.supplyAsync(() -> new ResponseEntity<Item>(this.itemService.findById(id, quantity), HttpStatus.OK));
+	}
+</pre>
+
+### Resilience4J en el API Gateway
+- Añadir la dependencia Resilience4J en el pom.xml de gateway-server. Pero a diferencia de antes,
+se tiene que anotar como reactiva:
+<pre>
+		<dependency>
+			<groupId>org.springframework.cloud</groupId>
+			<artifactId>spring-cloud-starter-circuitbreaker-reactor-resilience4j</artifactId>
+		</dependency>
+</pre>
+- Colocar la configuracion de Resilience4J en el archivo properties del API Gateway. En este caso
+se va a crear la configuracion "products"
+<pre>
+
+resilience4j:
+  circuitbreaker:
+    configs:
+      defaultConfigProducts:
+        sliding-window-size: 6
+        failure-rate-threshold: 50
+        wait-duration-in-open-state: 20s
+        permitted-number-of-calls-in-half-open-state: 4
+        slow-call-rate-threshold: 50
+        slow-call-duration-threshold: 2s
+    instances:
+      products:
+        base-config: defaultConfigProducts
+  timelimiter:
+    configs:
+     defaultConfigProductsTimeout:
+        timeout-duration: 2s
+    instances:
+      products:
+        base-config: defaultConfigProductsTimeout
+</pre>
+
+- Ahora, para añadirlo al Gateway de products, es necesario colocar la configuración products como filtro.
+El nombre es por defecto CircuitBreaker:
+
+<pre>
+        filters:
+          - StripPrefix=2
+          - Cookie=Custom message!, user, markete
+          - CircuitBreaker=products
+</pre>
+
+-Pero con esta configuración no entra en cortocircuito en las excepciones. Hay que hacer otra configuración:
+<pre>
+        filters:
+          - StripPrefix=2
+          - Cookie=Custom message!, user, markete
+          - name: CircuitBreaker
+            args:
+              name: products
+              statusCodes: 500,404
+</pre>
+
+- Para crear métodos alternativos en la API Gateway lo que hay que hacer es añadir otro argumento llamado <b>fallbackUri</b>
+En esta Uri se tiene que indicar otro microservicio que no sea el propiertario de este filtro ya que éste estará en cortocircuito y seguirá
+sin estar disponible para hacer método alternativo
+
+<pre>
+        filters:
+          - StripPrefix=2
+          - Cookie=Custom message!, user, markete
+          - name: CircuitBreaker
+            args:
+              name: products
+              statusCodes: 500,404
+              fallbackUri: forward:/api/items/2/quantity/3
+</pre>

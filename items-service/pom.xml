@@ -4,7 +4,9 @@
 	<parent>
 		<groupId>org.springframework.boot</groupId>
 		<artifactId>spring-boot-starter-parent</artifactId>
-		<version>2.3.0.RELEASE</version>
+		<!-- Para usar Hystrix
+		<version>2.3.0.RELEASE</version>-->
+		<version>2.7.4</version>
 		<relativePath /> <!-- lookup parent from repository -->
 	</parent>
 	<groupId>com.app.productservice</groupId>
@@ -14,7 +16,9 @@
 	<description>Microservices project for Spring Boot</description>
 	<properties>
 		<java.version>11</java.version>
-		<spring-cloud.version>Hoxton.SR12</spring-cloud.version>
+		<!--Para usar Hystrix
+		<spring-cloud.version>Hoxton.SR12</spring-cloud.version>-->
+		<spring-cloud.version>2021.0.4</spring-cloud.version>
 	</properties>
 	<dependencies>
 		<dependency>
@@ -51,8 +55,20 @@
 		
 		<dependency>
 			<groupId>org.springframework.cloud</groupId>
+			<artifactId>spring-cloud-starter-bootstrap</artifactId>
+		</dependency>
+		
+		<dependency>
+			<groupId>org.springframework.cloud</groupId>
+			<artifactId>spring-cloud-starter-circuitbreaker-resilience4j</artifactId>
+		</dependency>
+		
+		<!-- En su lugar se usara Resillence4J
+		<dependency>
+			<groupId>org.springframework.cloud</groupId>
 			<artifactId>spring-cloud-starter-netflix-hystrix</artifactId>
 		</dependency>
+		-->
 	</dependencies>
 
 	<build>

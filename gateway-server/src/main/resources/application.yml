@@ -1,0 +1,69 @@
+# Configuración Resilience4J
+
+resilience4j:
+  circuitbreaker:
+    configs:
+      defaultConfigProducts:
+        sliding-window-size: 6
+        failure-rate-threshold: 50
+        wait-duration-in-open-state: 20s
+        permitted-number-of-calls-in-half-open-state: 4
+        slow-call-rate-threshold: 50
+        slow-call-duration-threshold: 2s
+    instances:
+      products:
+        base-config: defaultConfigProducts
+  ## Configurar Timeout
+  timelimiter:
+    configs:
+     defaultConfigProductsTimeout:
+        timeout-duration: 2s
+    instances:
+      products:
+        base-config: defaultConfigProductsTimeout
+
+spring:
+  application:
+    name: gateway-service-server
+  cloud:
+    gateway:
+      routes:
+      - id: products-service
+        uri: lb://products-service
+        predicates:
+          - Path=/api/products/**
+          # Que el header lleve un parámetro token y tiene que ser un digito(marcado con \d+)
+          ##- Header= token, \d+ 
+          #- Header= Content-Type,application/json 
+          # Que solo permitan GET y POST
+          ##- Method=GET, POST
+          # Envia una Query? en la url con el parámetro color y valor verde
+          # - Query=color, green para un color en específico
+          ##- Query=color
+          # Envia cookies al ejecutar esta URL
+          ##- Cookie=color, blue
+        filters:
+          - StripPrefix=2
+          - Cookie=Custom message!, user, markete
+          - name: CircuitBreaker
+            args:
+              name: products
+              statusCodes: 500
+              fallbackUri: forward:/api/items/
+      - id: items-service
+        uri: lb://items-service
+        predicates:
+          - Path=/api/items/**
+        filters:
+          - StripPrefix=2
+          - AddRequestHeader=token-request, 123456
+          - AddResponseHeader=token-response, 12345678
+          #- AddResponseHeader=Content-Type, text/plain add para agregar
+          #- SetResponseHeader=Content-Type, text/plain set para editar existentes
+          - AddRequestParameter=name, Marcos
+server:
+  port: 8090
+eureka:
+  client:
+    service-url:
+      defaultZone: http://localhost:8761/eureka

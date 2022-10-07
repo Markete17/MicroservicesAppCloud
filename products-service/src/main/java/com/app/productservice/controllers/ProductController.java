@@ -1,6 +1,7 @@
 package com.app.productservice.controllers;
 
 import java.util.List;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 import org.springframework.beans.factory.annotation.Autowired;
@@ -40,7 +41,18 @@ public class ProductController {
 	}
 
 	@GetMapping("/{id}")
-	public ResponseEntity<Product> getProduct(@PathVariable Long id) {
+	public ResponseEntity<Product> getProduct(@PathVariable Long id) throws InterruptedException {
+		
+		/** Para testear error con Resillence 4J Tasa de fallo*/
+		if(id.equals(10L)) {
+			throw new IllegalStateException("Product not found");
+		}
+		
+		/** Para testear timeout con Resillence 4J*/
+		if(id.equals(7L)) {
+			TimeUnit.SECONDS.sleep(5L);
+		}
+		
 		Product product = this.productService.findById(id);
 		if (product != null) {
 			// product.setPort(this.port)
@@ -57,8 +69,6 @@ public class ProductController {
 			 try { Thread.sleep(2000L); } catch (InterruptedException e) {
 			 e.printStackTrace(); }
 			 */
-			 
-
 			return new ResponseEntity<>(product, HttpStatus.OK);
 		} else {
 			return new ResponseEntity<Product>(HttpStatus.NOT_FOUND);

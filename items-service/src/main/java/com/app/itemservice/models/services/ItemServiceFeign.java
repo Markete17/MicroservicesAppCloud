@@ -21,7 +21,6 @@ public class ItemServiceFeign implements ItemService {
 
 	@Override
 	public List<Item> findAll() {
-		System.out.println("AQUI");
 		ResponseEntity<List<Product>> response = this.clientRestProduct.getAllProducts();
 		System.out.println(response);
 		return this.clientRestProduct.getAllProducts().getBody().stream().map(
