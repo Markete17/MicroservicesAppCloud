@@ -12,16 +12,18 @@ Para añadirlo a Spring, a partir de Spring 2.4 > no es compatible con Ribbon po
 modificar el pom de items para utilizar la versión 2.3.0.RELEASE (por ejemplo) y además, es necesario cambiar 
 la versión de spring-cloud a Hoxton.SR12.
 <pre>
+<code>
 <version>2.7.4</version> --> <version>2.3.0.RELEASE</version> 
 
 <spring-cloud.version>2021.0.4</spring-cloud.version> -->
 <spring-cloud.version>Hoxton.SR12</spring-cloud.version>
-</pre>
+</code></pre>
 
 - Configuración de Ribbon en el properties:
 <pre>
+<code>
 products-service.ribbon.listOfServers = localhost:8001,localhost:9001
-</pre>
+</code></pre>
 
 Ribbon utiliza un algoritmo para ELEGIR la mejor instancia del microservicio para obtener los datos.
 
@@ -40,18 +42,20 @@ Eureka es un servidor para el registro y localización de microservicios, balanc
 
 Por defecto Euroke se registra así mismo como servidor y como cliente/microservicio. Interesa que se comporte como servidor poniendo en properties:
 <pre>
+<code>
 eureka.client.register-with-eureka=false
 eureka.client.fetch-registry=false
-</pre>
+</code></pre>
 Es necesario agregar la dependencia JAXB en el pom.xml si se usa Java >=11 sino no es necesario. 
 En la documentación JDK 11 Support: https://cloud.spring.io/spring-cloud-netflix/multi/multi_spring-cloud-eureka-server.html
 
 <pre>
+<code>
 		<dependency>
 			<groupId>org.glassfish.jaxb</groupId>
 			<artifactId>jaxb-runtime</artifactId>
 		</dependency>
-</pre>
+</code></pre>
 
 Con esto ya se ha creado un servidor eureka que manejará a los microservicios (products e items).
 Para ir al panel de Eureka, acceder a la ruta asignada en el puerto 8761 (indicado en properties)
@@ -64,8 +68,9 @@ Para ir al panel de Eureka, acceder a la ruta asignada en el puerto 8761 (indica
 - Poner en el properties de cada microservicio el servidor de eureka al que se va a conectar. Esto no es necesario si están en la misma máquina, pero por si acaso, ponerlo.
 
 <pre>
+<code>
 eureka.client.service-url.defaultZone = http://localhost:8761/eureka
-</pre>
+</code></pre>
 
 - Quitar las dependencias Ribbon del pom.xml porque Eureka ya tiene esta dependencia implícita. Además, es necesario
 eliminar la anotación @RibbonClient(name = "products-service") del app run class. Feign es necesario ya que se necesita como cliente para conectarse a las apis.
@@ -80,8 +85,9 @@ La idea es que Spring de forma automática asigne el puerto de los servicios par
 - Modificar en el archivo properties de cada microservicio, el server.port = ${PORT:0}
 - Añadir una nueva línea de configuración de Eureka para que se asigne una url dinámica al servicio:
 <pre>
+<code>
 eureka.instance.instance-id=${spring.application.name}:${spring.application.instance_id:${random.value}}
-</pre>
+</code></pre>
 
 ## Hystrix
 
@@ -93,11 +99,12 @@ Al igual que pasa con Ribbon, Hystrix es compatible con Spring <=2.3 con Spring 
 
 - Agregar la dependencia
 <pre>
+<code>
 		<dependency>
 			<groupId>org.springframework.cloud</groupId>
 			<artifactId>spring-cloud-starter-netflix-hystrix</artifactId>
 		</dependency>
-</pre>
+</code></pre>
 
 - Agregar en la clase run, la anotación @EnableCircuitBreaker
 - Con esto, Hystrix va a manejar los Runtime Exception. Es necesario poner en los métodos de los controladores
@@ -119,6 +126,7 @@ https://cloud.spring.io/spring-cloud-static/spring-cloud-netflix/1.3.6.RELEASE/m
 Copiar la configuración
 
 <pre>
+<code>
 
 hystrix.command.default.execution.isolation.thread.timeoutInMilliseconds: 60000
 
@@ -128,19 +136,20 @@ ribbon:
   
   ReadTimeout: 60000
   
-</pre>
+</code></pre>
 
 Que pasándolo al properties de item:
 IMPORTANTE: Asegurarse que el tiempo de respuesta de Hystrix sea mayor que ribbon: 20000>13000
 
 <pre>
+<code>
 
 hystrix.command.default.execution.isolation.thread.timeoutInMilliseconds: 20000
 
 ribbon.ConnectTimeout: 3000
 
 ribbon.ReadTimeout: 10000
-</pre>
+</code></pre>
 
 - Ahora al hacer el ejemplo del timeout de 2 segundos en el método, se debería de esperar esos 2 segundos y ejecutará
 el método original.
@@ -161,6 +170,7 @@ Zuul NO es disponible para versiones >=2.4
 - Crear un nuevo proyecto zuul-server que tenga las dependencias: devtools, spring web y eureka client.
 - Modificar el pom.xml para poner las versiones anteriores:
 <pre>
+<code>
 	<parent>
 		<groupId>org.springframework.boot</groupId>
 		<artifactId>spring-boot-starter-parent</artifactId>
@@ -171,17 +181,19 @@ Zuul NO es disponible para versiones >=2.4
 		<java.version>11</java.version>
 		<spring-cloud.version>Hoxton.SR12</spring-cloud.version>
 	</properties>
-</pre>
+</code></pre>
 - Añadir la dependencia zuul:
 <pre>
+<code>
 		<dependency>
 			<groupId>org.springframework.cloud</groupId>
 			<artifactId>spring-cloud-starter-netflix-zuul</artifactId>
 		</dependency>
-</pre>
+</code></pre>
 
 - Configurar el properties del proyecto. Añadiendo la configuración de cliente Eureka y las rutas zuul:
 <pre>
+<code>
 - Configuración Eureka
 eureka.client.service-url.defaultZone = http://localhost:8761/eureka
 
@@ -194,7 +206,7 @@ zuul.routes.products.path=/api/products/**
 #### Items
 zuul.routes.items.service-id=items-service
 zuul.routes.items.path=/api/items/**
-</pre>
+</code></pre>
 
 - Al runear los microservicios, hay que runear el proyecto zuul el último.
 - Al hacer las peticiones, es necesario hacerlas en el puerto de zuul (8090 o el que se haya asignado)
@@ -226,10 +238,11 @@ Implementar los métodos @Override:
 
 Lo implementado en el run, se podrá ver por la consola. Para ello, ir al BootDashboard de spring, seleccionar el proyecto zuul-server click derecho y open console. Aquí indicará lo implementado (ver clases en zuul-server project.
 <pre>
+<code>
 c.a.z.filters.PostTimeElapsedFilter : Enter to POST
 c.a.z.filters.PostTimeElapsedFilter : Time elapsed: 0.548 seconds.
 c.a.z.filters.PostTimeElapsedFilter : Time elapsed: 0.548 ms.
-</pre>
+</code></pre>
 
 ### Zuul Configurar TimeOuts
 Con la configuración Hystrix anterior, en zuul no vale. Es necesario configurar los timeouts en Zuul con las nuevas rutas.
@@ -237,10 +250,11 @@ Con la configuración anterior (HystrixCommand + lo del properties) para zuul si
 
 Para ello, se copia la configuración de Hystrix y se copia tanto en items-service como en zuul-service (ambos)
 <pre>
+<code>
 hystrix.command.default.execution.isolation.thread.timeoutInMilliseconds: 10000
 ribbon.ConnectTimeout: 3000
 ribbon.ReadTimeout: 60000
-</pre>
+</code></pre>
 
 Cabe indicar que si solo se pone en zuul-server y se descomenta en item-server, no va a esperar y entrará en la ruta alternativa.
 Por eso, es necesario ponerlo en ambos proyectos para que espere los 2 segundos y ejecute el método original y no el alternativo.
@@ -261,6 +275,7 @@ Por eso, es necesario ponerlo en ambos proyectos para que espere los 2 segundos 
  properties como en uno nuevo .yml. En este ejemplo se va a crear un nuevo archivo yml.
  
  <pre>
+ <code>
  spring:
   application:
     name: gateway-service-server
@@ -290,10 +305,11 @@ eureka:
   client:
     service-url:
       defaultZone: http://localhost:8761/eureka
- </pre>
+ </code></pre>
  
  Con un archivo properties:
  <pre>
+ <code>
  ## Configuracion con properties
 
 spring.application.name=zuul-service-server
@@ -312,7 +328,7 @@ spring.cloud.gateway.routes[1].id=items-service
 spring.cloud.gateway.routes[1].uri=lb://items-service
 spring.cloud.gateway.routes[1].predicates=Path=/api/items/**
 spring.cloud.gateway.routes[1].filters=StripPrefix=2
- </pre>
+ </code></pre>
  
  <b>Con esto, se estaría usando Spring API Gateway en vez de Zuul. Tiene una configuración similar y la diferencia es que con Spring Gateway no se tiene que poner 
  ninguna anotación en la clase app run y con Zuul se tiene que poner la anotación @EnableZuulProxy.
@@ -327,6 +343,7 @@ spring.cloud.gateway.routes[1].filters=StripPrefix=2
  - Para implementar el filtro PRE y POST en el método filter, se necesita programación reactiva con la función then. (Ver clase  GlobalFilterExample)
  
  <pre>
+ <code>
  	@Override
 	public Mono<Void> filter(ServerWebExchange exchange, GatewayFilterChain chain) {
 		
@@ -342,31 +359,34 @@ spring.cloud.gateway.routes[1].filters=StripPrefix=2
 			exchange.getResponse().getHeaders().setContentType(MediaType.TEXT_PLAIN);
 		}));
 	}
- </pre>
+ </code></pre>
  
  Modificando la respuesta es sencillo pero para modificar la request tiene algunas restricciones.
  Se necesita usar la función mutable para hacer la request modificable y con la función headers se pueden añadir tokens al header.
  <pre>
+ <code>
  		/*MODIFICAR LA REQUEST*/
 		exchange.getRequest().mutate().headers(h -> {
 			h.add("token", "123456");
 		});
- </pre>
+ </code></pre>
  En el POST, se puede modificar esta request que se editó en el PRE:
  <pre>
+ <code>
  			Optional.ofNullable(exchange.getRequest().getHeaders().getFirst("token"))
 			.ifPresent(value -> exchange.getResponse().getHeaders().add("token", value));
- </pre>
+ </code></pre>
  
  Para aplicar un orden a las clases que implementan filtros es necesario que la clase @Component GlobalFilterExample implements Order
  e implementar el método Override getOrder().
  
  <pre>
+ <code>
  	@Override
 	public int getOrder() {
 		return 1;
 	}
- </pre>
+ </code></pre>
  
  ### Gateway Filter Factory
  Otra manera de crear filtros mucho más personalizable.
@@ -375,6 +395,7 @@ spring.cloud.gateway.routes[1].filters=StripPrefix=2
  @Component ExampleGatewayFilterFactory extends AbstractGatewayFilterFactory<ExampleGatewayFilterFactory.ConfigurationFilter>
  - Como se comprueba, maneja un genérico como clase de configuración que hay que crearlo como clase interna:
  <pre>
+ <code>
  @Component
 public class ExampleGatewayFilterFactory extends AbstractGatewayFilterFactory<ExampleGatewayFilterFactory.ConfigurationFilter> {
 
@@ -382,10 +403,11 @@ public class ExampleGatewayFilterFactory extends AbstractGatewayFilterFactory<Ex
 
 	}
 }
- </pre>
+ </code></pre>
  - Implementar el método Override apply(), es decir, aplicar el filtro con la clase de configuración personalizada.
  Es igual que el otro pero mucho más configurable porque las propiedades son dinámicas:
  <pre>
+ <code>
  	@Override
 	public GatewayFilter apply(ConfigurationFilter config) {
 		
@@ -405,13 +427,14 @@ public class ExampleGatewayFilterFactory extends AbstractGatewayFilterFactory<Ex
 			}));
 		};
 	}
- </pre>
+ </code></pre>
  
  - Es mucho más configurables porque en el properties o yml, se puede añadir estos filtros. Por ejemplo,
  si solo se quiere que esto se ejecute para el microservicio products, se pone en el properties del products y en items no.
  Es necesario que en el name se ponga el prefijo que se ha puesto en <name>GatewayFilterFactory y en args, los argumentos 
  de la clase interna ESTÁTICA de configuración. <b>Para que funcione y se vincule correctamente es necesario que la clase interna de configuración sea estática y que implemente los getters & setters (ver clase Configuration)</b>
  <pre>
+ <code>
          filters:
           - StripPrefix=2
           - name: Example
@@ -419,15 +442,17 @@ public class ExampleGatewayFilterFactory extends AbstractGatewayFilterFactory<Ex
               message: "Hello! This is a message"
               cookieName: "user"
               cookieValue: "Marcos"
- </pre>
+ </code></pre>
  También se puede poner de forma compacta:
  <pre>
+ <code>
          filters:
           - StripPrefix=2
           - Cookie=Custom message!, user, Marcos
- </pre>
+ </code></pre>
  Pero para este ejemplo último, se necesita añadir el orden de los objetos y el nombre de la clase. Es decir, implementar los métodos override:
  <pre>
+ <code>
  	@Override
 	public String name() {
 		return "Cookie";
@@ -437,7 +462,7 @@ public class ExampleGatewayFilterFactory extends AbstractGatewayFilterFactory<Ex
 	public List<String> shortcutFieldOrder() {
 		return Arrays.asList("message", "cookieName", "cookieValue");
 	}
- </pre>
+ </code></pre>
  
  ### Filtros de fábrica en Spring Cloud Gateway
  Estos son algunos filtros que se usan de fábrica en Spring Gateway y que se pueden añadir directamente al archivo properties:
@@ -448,13 +473,14 @@ public class ExampleGatewayFilterFactory extends AbstractGatewayFilterFactory<Ex
   Luego estos parámetros se pueden usar en un controller
  
  <pre>
+ <code>
  	@GetMapping
 	public ResponseEntity<List<Item>> getAllItems(@RequestParam(name = "name",required = false) String name, @RequestHeader(name = "token-request",required = false) String token) {
 		System.out.println("Name: "+name);
 		System.out.println("Token: "+token);
 		return new ResponseEntity<>(this.itemService.findAll(), HttpStatus.OK);
 	}
- </pre>
+ </code></pre>
  
  - Para modificar se usa el prefijo Set y se usa para parámetros ya existentes de las cabeceras. Ej: - SetResponseHeader=Content-Type, text/plain
  - Todos los filtros de fábrica se encuentran en: https://docs.spring.io/spring-cloud-gateway/docs/current/reference/html/#gatewayfilter-factories
@@ -463,12 +489,14 @@ public class ExampleGatewayFilterFactory extends AbstractGatewayFilterFactory<Ex
  ### Predicates de fábrica en Spring Cloud Gateway
  Los predicates son reglas del request. Por ejemplo, la regla Path que para ejecutarse cierto microservicio, necesita que tenga una ruta específica difinida en Path.
  <pre>
+ <code>
          predicates:
           - Path=/api/products/**
- </pre>
+ </code></pre>
  <b>Pero hay muchos más:</b>
  
  <pre>
+ <code>
         predicates:
           - Path=/api/products/**
           # Que el header lleve un parámetro token y tiene que ser un digito(marcado con \d+)
@@ -481,7 +509,7 @@ public class ExampleGatewayFilterFactory extends AbstractGatewayFilterFactory<Ex
           - Query=color
           # Envia cookies al ejecutar esta URL
           - Cookie=color, blue
- </pre>
+ </code></pre>
  
  Si no se cumplen todas estas reglas, da el siguiente error: 404 Not Found.
  Hay muchos más predicates que se pueden encontrar en: https://docs.spring.io/spring-cloud-gateway/docs/current/reference/html/#gateway-request-predicates-factories
@@ -507,6 +535,7 @@ Parámetros del Circuit Breaker (POR DEFECTO):
 
 Para usar Resilence4J, lo primero actualizar el pom.xml a la ultima versión de Spring y Spring cloud ya que Hystrix usaba Spring<=2.3.
 <pre>
+<code>
 	<!-- Para usar Hystrix
 	<version>2.3.0.RELEASE</version>-->
 	<version>2.7.4</version>
@@ -517,15 +546,17 @@ Para usar Resilence4J, lo primero actualizar el pom.xml a la ultima versión de 
 		<spring-cloud.version>Hoxton.SR12</spring-cloud.version>-->
 		<spring-cloud.version>2021.0.4</spring-cloud.version>
 	</properties>
-</pre>
+</code></pre>
 
 Y en la clase principal, quitar el @EnableCircuitBreaker que usaba Hystrix:
 <pre>
+<code>
 //@EnableCircuitBreaker // Para usar Hystrix para la tolerancia a fallos y timeouts
-</pre>
+</code></pre>
 
 Ahora solo falta añadir las dependencias.
 <pre>
+<code>
 		<dependency>
 			<groupId>org.springframework.cloud</groupId>
 			<artifactId>spring-cloud-starter-bootstrap</artifactId>
@@ -534,24 +565,26 @@ Ahora solo falta añadir las dependencias.
 			<groupId>org.springframework.cloud</groupId>
 			<artifactId>spring-cloud-starter-circuitbreaker-resilience4j</artifactId>
 		</dependency>
-</pre>
+</code></pre>
 
 Spring Cloud boostrap no tiene nada que ver con Resilence4J pero
 se usará para implementar un archivo de configuración y añadir el parámetro en properties.
 
 <pre>
+<code>
 spring.config.import=optional:configserver:
-</pre>
+</code></pre>
 
 Ahora para cualquier Controller, se puede usar el objeto @Autowired private CircuitBreakerFactory circuitBreakerFactory;
 en alguna requestmapping y además a la vez poner el método alternativo.
 <pre>
+<code>
 	@GetMapping("/{id}/quantity/{quantity}")
 	public ResponseEntity<Item> getItem(@PathVariable Long id, @PathVariable Integer quantity) {
 		/**Probar Resilence4j**/
 		return circuitBreakerFactory.create("items").run(() ->new ResponseEntity<Item>(this.itemService.findById(id, quantity), HttpStatus.OK),e -> alternativeMethod(id, quantity,e));
 	}
-</pre>
+</code></pre>
 
 Con el circuitbreaker y los parámetros por defecto. De 100 peticiones, si por ejemplo se hacen 55 peticiones erroneas a esta URL y 45 peticiones correctas, superará el umbral y entrará en estado cerradao.
 Aquí aunque se realicen peticiones correctas, irá al método alternativo. Estára el estado semiabierto realizando con 10 pruebas de límite. Si supera el umbral del 50% de fallos, volverá al estado abierto, sino al cerrado.
@@ -561,6 +594,7 @@ Existen dos formas, mediante el properties o mediante una clase Bean.
 
 1. Mediante una clase Bean en un @Configuration
 	<pre>
+	<code>
 	@Configuration public class AppConfig
 	
 	@Bean
@@ -578,23 +612,24 @@ Existen dos formas, mediante el properties o mediante una clase Bean.
 					.build();
 		});
 	}
-	</pre>
+	</code></pre>
 	
 #### Timeouts con Resilence4J
 Se puede configurar también en el customizer la propiedad timeLimiterConfig(TimeLimiterConfig.ofDefaults()) pero en vez de que sea por defecto,
 personalizarla:
 <pre>
+<code>
 					.timeLimiterConfig(TimeLimiterConfig.custom()
 							.timeoutDuration(Duration.ofSeconds(6L)) /*6 segundos se demora (por defecto es 1)*/
 							.build())
-</pre>
+</code></pre>
 
 #### Llamadas lentas con Resilence4J
 Se configura también en el customizer de la propiedad circuitBreakerConfig.
-<pre>
+<pre><code>
 		.slowCallRateThreshold(50)//por defecto es 100%
 		.slowCallDurationThreshold(Duration.ofSeconds(2L)) //por defecto 60000ms
-</pre>
+</code></pre>
 Ahora toda llamada mayor de 2 seg se registra como llamada lenta.
 Cabe destacar que primero ocurre el timeout antes que la llamada lenta por lo que el tiempo de la llamada lenta tendra que ser menor.
 A diferencia de los timeouts, estas llamadas lentas se van a ejecutar como 200 OK pero se registará como llamada lenta que si se supera el 50% del umbral establecido, entrara en cortocircuito.
@@ -603,7 +638,7 @@ A diferencia de los timeouts, estas llamadas lentas se van a ejecutar como 200 O
 
 Se crea un nombre de configuracion y se le asigna a la instancia creada en el circuitBreakerFactory (return circuitBreakerFactory.create("items").run(()) en este caso para items.
 
-<pre>
+<pre><code>
 resilience4j:
   circuitbreaker:
     configs:
@@ -625,11 +660,11 @@ resilience4j:
     instances:
       items:
         base-config: defaultConfigItemsTimeout
-</pre>
+</code></pre>
 
 en properties:
 
-<pre>
+<pre><code>
 resilience4j.circuitbreaker.configs.defaultConfigItems.sliding-window-size=6
 resilience4j.circuitbreaker.configs.defaultConfigItems.failure-rate-threshold=50
 resilience4j.circuitbreaker.configs.defaultConfigItems.wait-duration-in-open-state=20s
@@ -640,18 +675,18 @@ resilience4j.circuitbreaker.instances.items.base-config=defaultConfigItems
  
 resilience4j.timelimiter.configs.defaultConfigItemsTimeout.timeout-duration=2s
 resilience4j.timelimiter.instances.items.base-config=defaultConfigItemsTimeout
-</pre>
+</code></pre>
 
 ### Anotacion @CircuitBreaker
 En vez de usar circuitBreakerFactory se puede usar la anotacion encima del método del controller.
 
-<pre>
+<pre><code>
 	@CircuitBreaker(name = "items",fallbackMethod = "alternativeMethod")
 	@GetMapping("/aux/{id}/quantity/{quantity}")
 	public ResponseEntity<Item> getItem2(@PathVariable Long id, @PathVariable Integer quantity) {
 		return new ResponseEntity<Item>(this.itemService.findById(id, quantity), HttpStatus.OK);
 	}
-</pre>
+</code></pre>
 
 Esta configuración de "items" tiene que estar en el archivo properties
 
@@ -660,36 +695,36 @@ La funcionalidad es la misma al @CircuitBreaker. Aqui la diferencia es que conti
 Solo contabiliza los timeouts y en CircuitBreakers se contabilizan las excepciones y llamadas lentas.
 Llamada futura asincrona. Cabe destacar que el método alternativo tambien tiene que devolver un CompletableFuture.
 
-<pre>
+<pre><code>
 	@TimeLimiter(name = "items",fallbackMethod = "alternativeMethod2")
 	@GetMapping("/aux2/{id}/quantity/{quantity}")
 	public CompletableFuture<ResponseEntity<Item>> getItem3(@PathVariable Long id, @PathVariable Integer quantity) {
 		return CompletableFuture.supplyAsync(() -> new ResponseEntity<Item>(this.itemService.findById(id, quantity), HttpStatus.OK));
 	}
-</pre>
+</code></pre>
 
 También se puede combinar con @CircuitBreaker pero si se combina es necesario quitar el fallbackMethod del TimeLimiter para que el CircuitBreaker haga la toleracion de fallos.
-<pre>
+<pre><code>
 	@TimeLimiter(name = "items")//,fallbackMethod = "alternativeMethod2")
 	@CircuitBreaker(name = "items",fallbackMethod = "alternativeMethod2") //se puede quitar o combinar con TimeLimiter
 	@GetMapping("/aux2/{id}/quantity/{quantity}")
 	public CompletableFuture<ResponseEntity<Item>> getItem3(@PathVariable Long id, @PathVariable Integer quantity) {
 		return CompletableFuture.supplyAsync(() -> new ResponseEntity<Item>(this.itemService.findById(id, quantity), HttpStatus.OK));
 	}
-</pre>
+</code></pre>
 
 ### Resilience4J en el API Gateway
 - Añadir la dependencia Resilience4J en el pom.xml de gateway-server. Pero a diferencia de antes,
 se tiene que anotar como reactiva:
-<pre>
+<pre><code>
 		<dependency>
 			<groupId>org.springframework.cloud</groupId>
 			<artifactId>spring-cloud-starter-circuitbreaker-reactor-resilience4j</artifactId>
 		</dependency>
-</pre>
+</code></pre>
 - Colocar la configuracion de Resilience4J en el archivo properties del API Gateway. En este caso
 se va a crear la configuracion "products"
-<pre>
+<pre><code>
 
 resilience4j:
   circuitbreaker:
@@ -711,20 +746,20 @@ resilience4j:
     instances:
       products:
         base-config: defaultConfigProductsTimeout
-</pre>
+</code></pre>
 
 - Ahora, para añadirlo al Gateway de products, es necesario colocar la configuración products como filtro.
 El nombre es por defecto CircuitBreaker:
 
-<pre>
+<pre><code>
         filters:
           - StripPrefix=2
           - Cookie=Custom message!, user, markete
           - CircuitBreaker=products
-</pre>
+</code></pre>
 
 -Pero con esta configuración no entra en cortocircuito en las excepciones. Hay que hacer otra configuración:
-<pre>
+<pre><code>
         filters:
           - StripPrefix=2
           - Cookie=Custom message!, user, markete
@@ -732,13 +767,13 @@ El nombre es por defecto CircuitBreaker:
             args:
               name: products
               statusCodes: 500,404
-</pre>
+</code></pre>
 
 - Para crear métodos alternativos en la API Gateway lo que hay que hacer es añadir otro argumento llamado <b>fallbackUri</b>
 En esta Uri se tiene que indicar otro microservicio que no sea el propiertario de este filtro ya que éste estará en cortocircuito y seguirá
 sin estar disponible para hacer método alternativo
 
-<pre>
+<pre><code>
         filters:
           - StripPrefix=2
           - Cookie=Custom message!, user, markete
@@ -747,4 +782,261 @@ sin estar disponible para hacer método alternativo
               name: products
               statusCodes: 500,404
               fallbackUri: forward:/api/items/2/quantity/3
-</pre>
+</code></pre>
+
+## Servidor de configuración con Spring Cloud Config Server
+
+Es un proyecto que va a tener las configuraciones de todos los microservicios de la aplicación.
+
+- Se crea el nuevo proyecto que tendrá las dependencias DevTools y Config Server de Spring Cloud Config.
+- La application run tendrá la anotación <b>@EnableConfigServer</b>
+- En properties, se necesita crear un repositorio para tener la configuración, para ello, en properties se debe poner
+la url del respositorio.(ver properties config-server)
+<pre><code>
+spring.cloud.config.server.git.uri=file:///XXXX/Desktop/config
+</code></pre>
+- Crear una carpeta en escritorio config y dentro git init. A partir de aqui se va a escribir la configuración:
+- Toda esta configuración de este proyecto se va a sobrescribir. Es decir si encuentra configuración en el properties que sea igual en este proyecto que en 
+otros microservicios, se va a sustituir y la demás configuración va a quedar como está.
+Por ejemplo, en el servicio items establecido en el puerto 8002, con la siguiente línea se va sustituir por el puerto 8005
+<pre><code>
+..\Escritorio\config> echo server.port=8005 > items-service.properties
+</code></pre>
+
+Con esto se creará el archivo items-service.properties con el server.port a 8005. 
+Seguir configurando el items-service.properties:
+
+<pre><code>
+server.port=8005 
+myconfig.text=Configurando entorno Desarrollo
+</code></pre>
+
+### Conectar el servidor de configuración con el microservicio.
+Antes que nada, probar la configuración hasta ahora de items-service. Se levanta el proyecto config-server y en postman
+realizar la petición: localhost:8888/items-service para ver mediante una petición GET la configuración que se ha escrito en el fichero.
+
+La respuesta dará la configuración:
+<pre><code>
+{
+    "name": "items-service",
+    "profiles": [
+        "default"
+    ],
+    "label": null,
+    "version": "bd55976518b7a0b28636d928a2afabfb48bd7c99",
+    "state": null,
+    "propertySources": [
+        {
+            "name": "file://C:/Users/marco/Escritorio/config/file:C:\\Users\\marco\\Escritorio\\config\\items-service.properties",
+            "source": {
+                "server.port": "8005 ",
+                "myconfig.text": "Configurando entorno Desarrollo"
+            }
+        }
+    ]
+}
+</code></pre>
+
+- Ahora, para vincular esta configuración al microservicio items es necesario añadir a este microservicio items 
+una nueva dependencia <b>Config Client</b>
+
+<pre><code>
+dependency = spring-cloud-starter-config
+</code></pre>
+
+-Para vincular items-service con config-server, se tiene que crear en resources un archivo llamado boostrap.properties que tenga 
+la uri del servidor de configuración.
+
+<pre><code>
+spring.application.name=items-service
+spring.cloud.config.uri=http://localhost:8888
+</code></pre>
+
+Va a cargar primero boostrap.properties que el properties o yml del microservicio
+
+- Para usar la configuración del bootstrap.properties en el microservicio. Como es un @ClientConfig, se 
+puede inyectar la anotación @Value.
+
+Se puede usar como global o tambien como parámetro.
+
+<pre><code>
+@RestController
+public class ItemController {
+	
+	@Value("${myconfig.text}")
+	@Autowired
+	private String text;
+	
+		@GetMapping("/get-config")
+		public ResponseEntity<?> getConfig(@Value("${server.port}") String port ){
+		logger.info(text);
+		
+		Map<String, String> json = new HashMap<>();
+		json.put("text", this.text);
+		json.put("port", port);
+		return new ResponseEntity<Map<String,String>>(json,HttpStatus.OK);
+	}
+
+}
+</code></pre
+
+-Para probarlo, se levanta el servidor de configuración primero y al hacer el GET en Postman, se puede ver 
+como ha cambiado el puerto:localhost:8005/get-config
+
+
+<pre><code>
+{
+    "port": "8005",
+    "text": "Configurando entorno Desarrollo"
+}
+</code></pre>
+
+
+### Configurando los entornos en repositorio de configuración
+En la carpeta Config, se crean dos nuevos archivos y tienen que llevar el siguiente formato:
+<b>[nombreMicroservicio]-[entorno].properties</b>
+
+Para desarollo: items-service-dev.properties
+<pre><code>
+server.port=8005
+myconfig.text=Configurando entorno Desarrollo
+myconfig.author.name=Marcos
+myconfig.author.email=marcos@marcos.com
+</code></pre>
+
+Para producción: items-service-prod.properties
+<pre><code>
+server.port=8007
+myconfig.text=Configurando entorno Producción
+myconfig.author.name=Marcos
+myconfig.author.email=marcos@marcos.com
+</code></pre>
+
+Y se tienen que hacer los commits de este repositorio antes de probar.
+
+- Para configurarlo en Spring, se necesita modificar el bootstrap.properties de items-service o del microservicio que se ha añadido la configuración
+en el repositorio config.
+
+<pre><code>
+spring.application.name=items-service
+spring.cloud.config.uri=http://localhost:8888
+spring.profiles.active=dev
+</code></pre>
+
+Para leer estos valores en el controller, se puede usar también springframework.core.env.Environment en vez de la
+anotación @Value
+
+<pre><code>
+	@GetMapping("/get-config")
+	public ResponseEntity<?> getConfig(@Value("${server.port}") String port ){
+		logger.info(text);
+		
+		Map<String, String> json = new HashMap<>();
+		json.put("text", this.text);
+		json.put("port", port);
+		
+		if(environment.getActiveProfiles().length>0 && environment.getActiveProfiles()[0].equals("dev")) {
+			json.put("author.name", environment.getProperty("myconfig.author.name"));
+			json.put("author.email", environment.getProperty("myconfig.author.email"));
+		}
+		
+		return new ResponseEntity<Map<String,String>>(json,HttpStatus.OK);
+	}
+</code></pre>
+
+Y al hacer la petición localhost:8005/get-config, se puede comprobar como al estar en el entorno de desarrollo,
+se va a dar la siguiente respuesta.
+
+<pre><code>
+{
+    "author.name": "Marcos",
+    "port": "8005",
+    "author.email": "marcos@marcos.com",
+    "text": "Configurando entorno Desarrollo"
+}
+</code></pre>
+
+Ahora al hacer la petición del servidor de configuración, se puede poner el entorno localhost:8888/items-service/dev y devolverá las configuraciones
+establecidas. Se puede apreciar como además del entorno dev, también tiene la configuración de por defecto y si tienen las mismas propiedades, sobrescribe sobre el de por defecto.
+
+<pre><code>
+{
+    "name": "items-service",
+    "profiles": [
+        "dev"
+    ],
+    "label": null,
+    "version": "284fbf162f959122205f1df332d6461fef60d09f",
+    "state": null,
+    "propertySources": [
+        {
+            "name": "file:///C:/Users/marco/Escritorio/config/file:C:\\Users\\marco\\Escritorio\\config\\items-service-dev.properties",
+            "source": {
+                "server.port": "8005",
+                "myconfig.text": "Configurando entorno Desarrollo",
+                "myconfig.author.name": "Marcos",
+                "myconfig.author.email": "marcos@marcos.com"
+            }
+        },
+        {
+            "name": "file:///C:/Users/marco/Escritorio/config/file:C:\\Users\\marco\\Escritorio\\config\\items-service.properties",
+            "source": {
+                "server.port": "8005",
+                "myconfig.text": "Configurando entorno default"
+            }
+        }
+    ]
+}
+</code></pre>
+
+
+### Actualizar cambios de la configuración en un microservicio con @RefreshScope
+Sirve para refrescar el controlador o bean que se use en caso de que cambie alguna configuración
+del archivo properties tanto del servidor de configuración como del propio properties del microservicio
+En caso de cambio en el Environment, inyecta de nuevo los autowired y el controlador. 
+Es necesario añadir la dependencia Spring Boot Actuator en el microservicio que se quiera utilizar.
+
+<pre><code>
+@RefreshScope
+@RestController
+public class ItemController {
+...
+}
+</code></pre>
+
+También se necesita modificar el bootstrap.properties para indicar el uso del RefreshScope
+<pre><code>
+spring.application.name=items-service
+spring.cloud.config.uri=http://localhost:8888
+spring.profiles.active=dev
+#Para que actualice con @RefreshScope los controladores en caso de cambio en la configuración
+management.endpoints.web.exposure.include=*
+</code></pre>
+
+- Ahora al modificar mediante un commit el archivo de configuración del servidor:
+
+items-service-dev.properties
+<pre><code>
+server.port=8005
+myconfig.text=Configurando entorno Desarrollo ...
+myconfig.author.name=Jhon
+myconfig.author.email=jhon@jhon.com
+</code></pre>
+
+git add *
+git commit ....
+
+Al hacer una petición POST del actuator: <b>localhost:8005/actuator/refresh </b>
+Indicará en la respuesta que se han cambiado correctamente los campos:
+
+<b>200 OK</b>
+<pre><code>
+
+[
+    "config.client.version",
+    "myconfig.text"
+]
+</code></pre>
+
+<b>Esto se puede hacer con configuraciones propias pero no se podrá actualizar en tiempo real configuraciones
+del servidor como server.port</b>
