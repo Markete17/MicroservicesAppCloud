@@ -117,7 +117,7 @@ modificar el pom de items para utilizar la versión 2.3.0.RELEASE (por ejemplo) 
 la versión de spring-cloud a Hoxton.SR12.
 <pre>
 <code>
-<version>2.7.4</version> --> <version>2.3.0.RELEASE</version> 
+ version 2.7.4 /version  -->  version 2.3.0.RELEASE /version  
 
 <spring-cloud.version>2021.0.4</spring-cloud.version> -->
 <spring-cloud.version>Hoxton.SR12</spring-cloud.version>
@@ -278,13 +278,13 @@ Zuul NO es disponible para versiones >=2.4
 	<parent>
 		groupId org.springframework.boot /groupId 
 		 artifactId spring-boot-starter-parent /artifactId 
-		<version>2.3.0.RELEASE</version>
+		 version 2.3.0.RELEASE /version 
 		<relativePath/> <!-- lookup parent from repository -->
 	</parent>
-	<properties>
+	 properties 
 		<java.version>11</java.version>
 		<spring-cloud.version>Hoxton.SR12</spring-cloud.version>
-	</properties>
+	 /properties 
 </code></pre>
 - Añadir la dependencia zuul:
 <pre>
@@ -640,16 +640,17 @@ Parámetros del Circuit Breaker (POR DEFECTO):
 Para usar Resilence4J, lo primero actualizar el pom.xml a la ultima versión de Spring y Spring cloud ya que Hystrix usaba Spring<=2.3.
 <pre>
 <code>
-	<!-- Para usar Hystrix
-	<version>2.3.0.RELEASE</version>-->
-	<version>2.7.4</version>
+	!-- Para usar Hystrix
+	 version 2.3.0.RELEASE /version> --!
+	 version 2.7.4 /version 
 		
-	<properties>
-		<java.version>11</java.version>
-		<!--Para usar Hystrix
-		<spring-cloud.version>Hoxton.SR12</spring-cloud.version>-->
-		<spring-cloud.version>2021.0.4</spring-cloud.version>
-	</properties>
+	 properties 
+		java.version 11 /java.version
+		!--Para usar Hystrix
+		
+		spring-cloud.version Hoxton.SR12 /spring-cloud.version --!
+		spring-cloud.version 2021.0.4 /spring-cloud.version
+	 /properties 
 </code></pre>
 
 Y en la clase principal, quitar el @EnableCircuitBreaker que usaba Hystrix:
@@ -1188,3 +1189,200 @@ public class ProductsServiceApplication {
 </code></pre>
 
 ## Spring Cloud Security: OAuth2 y JWT
+
+### Introducción a JWT (JSON Web Token)
+
+El usuario envía un código alfanumérico al servidor. El servidor se encarga de descifrar y validar el código comprobando si existe en el sistema y qué roles tiene.
+En este token puede ir información no sensible como el nombre, los roles, email, pero nunca la contraseña o tarjetas de crédito.
+Este estandar permite descodificar este código y generar este código a partir de una clave secreta con clave pública y privada.
+A partir de esta clave secreta se va a generar el token y se podrá comprobar si ha sido manipulado.
+
+Características:
+- El token es muy compacto y pequeño que va dentro de las cabeceras Http y almacena gran cantidad de información del usuario sin tener que realizar consultas al sevidor
+- Un problema es que el token se puede decodificar pero al firmarlo con clave secreta se va a comprobar si el token es manipulado.
+- El tiempo de caducidad del token por defecto es ilimitado por eso hay que configurar este tiempo.
+- Cada vez que se quiere acceder a un recurso de la api protegido, hay que enviar el token. ç
+- Analizar Jwt. Tiene 3 partes separadas por un punto. El header, la data o payload y la parte de seguridad.
+
+En el header se obtiene información sobre el algoritmo y el tipo.
+{
+  "alg": "HS256",
+  "typ": "JWT"
+}
+
+El payload estarían los datos.
+{
+  "sub": "1234567890",
+  "name": "John Doe",
+  "iat": 1516239022
+}
+
+La parte de seguridad que verifica la firma. Require un código secreto de 256 bits. Sirve para 
+verificar que este token no ha sido manipulado gracias a la clave secreta.
+HMACSHA256(
+  base64UrlEncode(header) + "." +
+  base64UrlEncode(payload),
+  
+your-256-bit-secret
+
+) 
+
+### Introducción a OAuth2
+Spring Security provee características de seguridad para aplicaciones Java. Maneja componentes de Autenticación
+y Autorización(control acceso).
+
+OAuth2 es un framework de autorización que permiten a las aplicaciones de terceros (angular,react,etc) autenticarse en el servidor
+sin tener que compartir información en el acceso como las credenciales.
+Se compone de dos partes:
+1. <b>Autorization Server:</b> es el servidor de autorización. Se encarga de realizar la autenticación del usuario. Si
+es válida, retorna un token. Y con este token el usuario acceder a los recursos.
+
+<b>POST: /auth/token </b>
+
+<b>Header:</b>
+Authorization: Base64(client_id:client_secret)
+Content-Type: application/x-www.form-urlencoded
+
+<b>Body</b>
+grant_type = password
+username = user
+password = 12345
+
+<b>Authorization Server return:</b>
+
+{
+"access_token": "dadsdsa54da5d4saf45"
+"token_type": "bearer"
+"refresh_token": "dadsdsa54da5d4saf45"
+"expires_in": 3589
+"scope": "read write"
+"jti": "58d4adsa-eads584-bf0-dsae54ad"
+}
+
+2. <b>Resource server:</b> servidor de recursos. Se encarga de administrar los permisos y accesos a las url/endpoints del backend.
+
+<b>GET: /api/items/products </b>
+
+<b>Header:</b>
+Authorization: Authorization Bearer acces_token
+
+<b>Resource Server return</b>
+Output in JSON
+
+
+### Autenticación con Spring Cloud Security
+
+#### 1. Crear el microservicio para usuarios con dependencias: DevTools, H2, Jpa, Eureka Client, Spring Web
+#### 2. Configurar el properties del microservicio:
+
+<pre><code>
+spring.application.name=users-service
+server.port=${PORT:0}
+
+# h2 console properties
+spring.h2.console.path=/h2-console
+spring.h2.console.settings.trace=false
+spring.h2.console.settings.web-allow-others=false
+spring.datasource.url=jdbc:h2:mem:testdb
+
+# Eureka Configuration
+eureka.client.service-url.defaultZone = http://localhost:8761/eureka
+eureka.instance.instance-id=${spring.application.name}:${spring.application.instance_id:${random.value}}
+
+# Debugear JPA
+logging.level.org.hibernate,SQL = debug
+</code></pre>
+
+#### 3. Crear las clases entity: Users y Roles
+
+- Clase User:
+
+<pre><code>
+@Entity
+@Table(name = "users")
+public class User implements Serializable {
+
+	private static final long serialVersionUID = 1L;
+	
+	@Id
+	@GeneratedValue(strategy = GenerationType.IDENTITY)
+	private Long id;
+
+	@Column(unique = true, length = 20)
+	private String username;
+
+	@Column(length = 60)
+	private String password;
+
+	private Boolean enabled;
+
+	private String firstName;
+
+	private String lastName;
+
+	@Column(unique = true, length = 100)
+	private String email;
+	
+	@ManyToMany(fetch = FetchType.LAZY) 
+	@JoinTable(
+	 name = "users_roles", 
+	 joinColumns = @JoinColumn(name="user_id"), 
+	 inverseJoinColumns = @JoinColumn(name="role_id"), 
+	 uniqueConstraints = {@UniqueConstraint(columnNames = {"user_id","role_id"})}
+	)
+	private List<Role> roles;
+	
+	... getters and setters	
+}
+</code></pre>
+
+- Clase Role:
+
+<pre><code>
+@Entity
+@Table(name = "roles")
+public class Role implements Serializable {
+
+	private static final long serialVersionUID = 1L;
+
+	@Id
+	@GeneratedValue(strategy = GenerationType.IDENTITY)
+	private Long id;
+
+	@Column(unique = true, length = 30)
+	private String name;
+	
+	... getters and setters
+}
+</code></pre>
+
+#### 4. Crear DAOS/Repository
+Aquí se pueden revisar Query Methods:
+https://docs.spring.io/spring-data/jpa/docs/current/reference/html/#repositories.query-methods.query-creation
+https://docs.spring.io/spring-data/jpa/docs/current/reference/html/#jpa.query-methods.query-creation
+
+Se puede utilizar la dependencia Spring Web Rest Repository que lo que hace es exportar el repositorio a un
+path para que haga el CRUD sin tener que crear el controller y la clase Service.
+
+<pre><code>
+@RepositoryRestResource(path = "users") //Dependencia SpringWeb Rest Repositories
+public interface UserDAO extends PagingAndSortingRepository<User, Long> {
+	public User findByUsername(String username);
+	
+	@Query("select u from User u where u.username=?1 and u.email=?2") //utilizando jpa HQL
+	//@Query(value = "select * from users u where u.username=?1 and u.email=?2", nativeQuery = true)
+	public User getByUsernameAndEmail(String username, String email);
+}
+
+</code></pre>
+Con esto ya se pueden hacer peticiones con POSTMAN a este repositorio
+
+
+### 5. Vincular esta ruta al api-gateway de Zuul Server
+
+Añadir en el application properties: 
+
+<pre><code>
+zuul.routes.users.service-id=users-service
+zuul.routes.users.path=/api/users/**
+</code></pre>
