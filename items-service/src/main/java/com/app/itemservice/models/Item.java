@@ -1,5 +1,7 @@
 package com.app.itemservice.models;
 
+import com.app.commonservice.models.entities.Product;
+
 public class Item {
 
 	private Product product;

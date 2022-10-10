@@ -1,6 +1,110 @@
 # MicroservicesAppCloud - Marcos Ruiz Muñoz 
 Formación en microservicios con Spring Cloud
 
+
+## Rest Template y Feign Client
+Se usan para que un microservicio utilice otro microservicio.
+
+### 1. Rest Template
+- Se necesita crear un bean en el application run que devuelva una instancia Rest Template
+<pre><code>
+	@Bean(name = "restClient")
+	@LoadBalanced //Para que RestTemplate use Balanceo de carga con Ribbon
+	public RestTemplate registerRestTemplate() {
+		return new RestTemplate();
+	}
+</code></pre>
+- En los service se inyecta esta dependencia y se puede utilizar para hacer los métodos GET,PUT,POST y DELETE
+- <b>GET:</b> se utiliza el método getForObject. Cabe destacar que en la URL se puede usar el nombre del microservicio y ya Ribbon (en Eureka o configurandolo en el microservicio) se
+encargará de elegir la mejor instancia.
+
+<pre><code>
+	@Override
+	public Item findById(Long id, Integer quantity) {
+		Map<String, String> pathVariablesMap = new HashMap<>();
+		pathVariablesMap.put("id", id.toString());
+		
+		// Al usar RestTemplate con balanceo de carga, ya no es necesario indicar la URL ya que Ribbon elegirá el puerto mejor disponible
+		
+		// Ahora hay que elegir el servicio
+		//Product product = this.restClient.getForObject("http://localhost:8001/products/{id}", Product.class, pathVariablesMap);
+		Product product = this.restClient.getForObject("http://products-service/products/{id}", Product.class, pathVariablesMap);
+		
+		return new Item(product,quantity);
+	}
+</code></pre>
+
+- <b>POST:</b>: se utiliza el método exchange indicando la URL, el método y el tipo de objeto que devuelve la petición:
+
+<pre><code>
+	@Override
+	public Product save(Product product) {
+		
+		HttpEntity<Product> body = new HttpEntity<Product>(product);
+		
+		//Con el método exchange se indica la url, el método y el tipo de objeto que se devuelve en el body. Hay que pasarle el body un HttpEntity que sera el objeto producto.
+		ResponseEntity<Product> responseEntity = this.restClient.exchange("http://products-service/create", HttpMethod.POST,body,Product.class);
+		Product productResponse=responseEntity.getBody();
+		return productResponse;
+	}
+</code></pre>
+
+- <b>PUT:</b>: se utiliza también el método exchange pero hay que agregarle los path variables a través de un HashMap
+
+<pre><code>
+	@Override
+	public Product update(Product product, Long id) {
+		
+		HttpEntity<Product> body = new HttpEntity<Product>(product);
+		
+		Map<String, String> pathVariablesMap = new HashMap<>();
+		pathVariablesMap.put("id", id.toString());
+		
+		ResponseEntity<Product> responseEntity = this.restClient.exchange("http://products-service/update/{id}", 
+				HttpMethod.PUT,body,Product.class, pathVariablesMap);
+		return responseEntity.getBody();
+	}
+</code></pre>
+
+- <b>DELETE:</b>: Utiliza el método delete indicando la url, el código HttpStatus.DELETE y las pathVariables
+
+<pre><code>
+	@Override
+	public void delete(Long id) {
+		Map<String, String> pathVariablesMap = new HashMap<>();
+		pathVariablesMap.put("id", id.toString());
+		
+		this.restClient.delete("http://products-service/delete/{id}", pathVariablesMap);
+	}
+</code></pre>
+
+### 2. Feign Client
+
+Es mejor usar la biblioteca Feign para crear un cliente que use la api de productos. Es mucho más sencillo, menos código y se consume el microservicio de forma remota mediante
+interfaces.
+Esto en vez de hacerlo con REST TEMPLATE, se puede hacer mediante interfaces con la bliblioteca Spring Feign
+Ir a ItemServiceFeign que usa ClientRestProduct
+- Se necesita inyectar la dependencia Open Feign: spring-cloud-starter-openfeign
+- En el application run se tendrá que poner la anotación <b>@EnableFeignClients</b>
+- En el microservicio que se va a usar otro microservicio, se crea una interfaz que tendrá la anotación
+<b>@FeignClient(name = "products-service")</b> indicando el nombre del microservicio que se va a utilizar.
+En esta interfaz se tendrá que poner las url handler del controlador del microservicio que se va a utilizar y de esta forma
+ya no hay que implementar nada más.
+
+<pre><code>
+@FeignClient(name = "products-service") //indicar el nombre especificado en el properties
+public interface ClientRestProduct {
+	
+	@GetMapping("/")
+	public ResponseEntity<List<Product>> getAllProducts();
+	
+	@GetMapping("/{id}")
+	public ResponseEntity<Product> getProduct(@PathVariable Long id);
+
+}
+
+</code></pre>
+
 ## Balanceo de carga con Ribbon
 
 Ejemplo de balanceo de carga.
@@ -51,10 +155,10 @@ En la documentación JDK 11 Support: https://cloud.spring.io/spring-cloud-netfli
 
 <pre>
 <code>
-		<dependency>
-			<groupId>org.glassfish.jaxb</groupId>
-			<artifactId>jaxb-runtime</artifactId>
-		</dependency>
+		dependency
+			groupId org.glassfish.jaxb /groupId 
+			 artifactId jaxb-runtime /artifactId 
+		/dependency
 </code></pre>
 
 Con esto ya se ha creado un servidor eureka que manejará a los microservicios (products e items).
@@ -100,10 +204,10 @@ Al igual que pasa con Ribbon, Hystrix es compatible con Spring <=2.3 con Spring 
 - Agregar la dependencia
 <pre>
 <code>
-		<dependency>
-			<groupId>org.springframework.cloud</groupId>
-			<artifactId>spring-cloud-starter-netflix-hystrix</artifactId>
-		</dependency>
+		dependency
+			groupId org.springframework.cloud /groupId 
+			 artifactId spring-cloud-starter-netflix-hystrix /artifactId 
+		/dependency
 </code></pre>
 
 - Agregar en la clase run, la anotación @EnableCircuitBreaker
@@ -172,8 +276,8 @@ Zuul NO es disponible para versiones >=2.4
 <pre>
 <code>
 	<parent>
-		<groupId>org.springframework.boot</groupId>
-		<artifactId>spring-boot-starter-parent</artifactId>
+		groupId org.springframework.boot /groupId 
+		 artifactId spring-boot-starter-parent /artifactId 
 		<version>2.3.0.RELEASE</version>
 		<relativePath/> <!-- lookup parent from repository -->
 	</parent>
@@ -185,10 +289,10 @@ Zuul NO es disponible para versiones >=2.4
 - Añadir la dependencia zuul:
 <pre>
 <code>
-		<dependency>
-			<groupId>org.springframework.cloud</groupId>
-			<artifactId>spring-cloud-starter-netflix-zuul</artifactId>
-		</dependency>
+		dependency
+			groupId org.springframework.cloud /groupId 
+			 artifactId spring-cloud-starter-netflix-zuul /artifactId 
+		/dependency
 </code></pre>
 
 - Configurar el properties del proyecto. Añadiendo la configuración de cliente Eureka y las rutas zuul:
@@ -557,14 +661,14 @@ Y en la clase principal, quitar el @EnableCircuitBreaker que usaba Hystrix:
 Ahora solo falta añadir las dependencias.
 <pre>
 <code>
-		<dependency>
-			<groupId>org.springframework.cloud</groupId>
-			<artifactId>spring-cloud-starter-bootstrap</artifactId>
-		</dependency>
-		<dependency>
-			<groupId>org.springframework.cloud</groupId>
-			<artifactId>spring-cloud-starter-circuitbreaker-resilience4j</artifactId>
-		</dependency>
+		dependency
+			groupId org.springframework.cloud /groupId 
+			 artifactId spring-cloud-starter-bootstrap /artifactId 
+		/dependency
+		dependency
+			groupId org.springframework.cloud /groupId 
+			 artifactId spring-cloud-starter-circuitbreaker-resilience4j /artifactId 
+		/dependency
 </code></pre>
 
 Spring Cloud boostrap no tiene nada que ver con Resilence4J pero
@@ -717,10 +821,10 @@ También se puede combinar con @CircuitBreaker pero si se combina es necesario q
 - Añadir la dependencia Resilience4J en el pom.xml de gateway-server. Pero a diferencia de antes,
 se tiene que anotar como reactiva:
 <pre><code>
-		<dependency>
-			<groupId>org.springframework.cloud</groupId>
-			<artifactId>spring-cloud-starter-circuitbreaker-reactor-resilience4j</artifactId>
-		</dependency>
+		dependency
+			groupId org.springframework.cloud /groupId 
+			 artifactId spring-cloud-starter-circuitbreaker-reactor-resilience4j /artifactId 
+		/dependency
 </code></pre>
 - Colocar la configuracion de Resilience4J en el archivo properties del API Gateway. En este caso
 se va a crear la configuracion "products"
@@ -1040,3 +1144,47 @@ Indicará en la respuesta que se han cambiado correctamente los campos:
 
 <b>Esto se puede hacer con configuraciones propias pero no se podrá actualizar en tiempo real configuraciones
 del servidor como server.port</b>
+
+
+## Biblioteca Commons para reutilzar código en microservicios
+La case Items y products son muy parecidos. Se puede crear un microservicio a parte para reutilizar código.
+- Crear un nuevo proyecto commons-service con dependencias Jpa
+- Quitar el proyecto main run ya que es un proyecto de librería y no se va a ejecutar.
+- Quitar en el pom.xml el plugin maven en build
+- Deshabilitar el autoconfiguración del DataSource que viene por defecto en SpringBoot: 
+
+<pre><code>
+@SpringBootApplication
+@EnableAutoConfiguration(exclude = {DataSourceAutoConfiguration.class})
+public class CommonsServiceApplication {
+
+}
+<b>También desactivar en service-items. OTRA Solución es usar en el commons-service la dependencia H2</b>
+
+</code></pre>
+
+- Crear el jar: ir al directorio y ejecutar mvn install: ...\commons-service>mvnw.cmd install
+- Ir al pom.xml del common y copiar el groupId,artifactId y version para pegarlo como dependencia
+en los microservicios que se vayan a usar:
+
+<pre><code>
+		dependency
+			groupId com.app.commonservice /groupId
+			artifactId commons-service /artifactId
+			version 0.0.1-SNAPSHOT /version
+		/dependency
+</code></pre>
+
+- Ahora importar el Product del paquete commons:import com.app.commonservice.models.entities.Product en todas las clases donde se use.
+- Utilizar la anotacion @EntityScan ya que Product no está en el paquete raíz y no lo encuentra. Con esta anotación obliga a escanear en el package commons:
+
+<pre><code>
+@EnableEurekaClient
+@SpringBootApplication
+@EntityScan({"com.app.commonservice.models.entities"})
+public class ProductsServiceApplication {
+...
+}
+</code></pre>
+
+## Spring Cloud Security: OAuth2 y JWT

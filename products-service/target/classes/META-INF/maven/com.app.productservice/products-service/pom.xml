@@ -52,6 +52,11 @@
 				spring-cloud-starter-netflix-eureka-client
 			</artifactId>
 		</dependency>
+		<dependency>
+			<groupId>com.app.commonservice</groupId>
+			<artifactId>commons-service</artifactId>
+			<version>0.0.1-SNAPSHOT</version>
+		</dependency>
 	</dependencies>
 
 	<build>

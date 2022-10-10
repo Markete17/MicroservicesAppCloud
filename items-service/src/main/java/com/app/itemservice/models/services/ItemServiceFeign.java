@@ -9,7 +9,7 @@ import org.springframework.stereotype.Service;
 
 import com.app.itemservice.clients.ClientRestProduct;
 import com.app.itemservice.models.Item;
-import com.app.itemservice.models.Product;
+import com.app.commonservice.models.entities.Product;
 
 @Service("serviceFeign")
 //@Primary //Para que use por defecto esta primero
@@ -33,6 +33,22 @@ public class ItemServiceFeign implements ItemService {
 	public Item findById(Long id, Integer quantity) {
 		Product product = this.clientRestProduct.getProduct(id).getBody();
 		return new Item(product,quantity);
+	}
+
+	@Override
+	public Product save(Product product) {
+		return this.clientRestProduct.create(product);
+	}
+
+	@Override
+	public Product update(Product product, Long id) {
+		return this.clientRestProduct.update(product, id);
+	}
+
+	@Override
+	public void delete(Long id) {
+		this.clientRestProduct.delete(id);
+		
 	}
 
 }

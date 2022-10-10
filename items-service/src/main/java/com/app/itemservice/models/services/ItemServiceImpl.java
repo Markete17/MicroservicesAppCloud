@@ -7,11 +7,14 @@ import java.util.Map;
 import java.util.stream.Collectors;
 
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.HttpEntity;
+import org.springframework.http.HttpMethod;
+import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
 
 import com.app.itemservice.models.Item;
-import com.app.itemservice.models.Product;
+import com.app.commonservice.models.entities.Product;
 
 @Service("serviceRestTemplate")
 public class ItemServiceImpl implements ItemService {
@@ -30,7 +33,7 @@ public class ItemServiceImpl implements ItemService {
 		//List<Product> products = Arrays.asList(this.restClient.getForObject("http://localhost:8001/products", Product[].class));
 		
 		// Ahora hay que elegir el servicio
-		List<Product> products = Arrays.asList(this.restClient.getForObject("http://products-service/products", Product[].class));
+		List<Product> products = Arrays.asList(this.restClient.getForObject("http://products-service/", Product[].class));
 		return products.stream().map(
 				p -> new Item(p,1)
 				).collect(Collectors.toList());
@@ -43,9 +46,41 @@ public class ItemServiceImpl implements ItemService {
 		
 		//Mismo motivo que en findAll
 		//Product product = this.restClient.getForObject("http://localhost:8001/products/{id}", Product.class, pathVariablesMap);
-		Product product = this.restClient.getForObject("http://products-service/products/{id}", Product.class, pathVariablesMap);
+		Product product = this.restClient.getForObject("http://products-service/{id}", Product.class, pathVariablesMap);
 		
 		return new Item(product,quantity);
+	}
+
+	@Override
+	public Product save(Product product) {
+		
+		HttpEntity<Product> body = new HttpEntity<Product>(product);
+		
+		//Con el método exchange se indica la url, el método y el tipo de objeto que se devuelve en el body. Hay que pasarle el body un HttpEntity que sera el objeto producto.
+		ResponseEntity<Product> responseEntity = this.restClient.exchange("http://products-service/create", HttpMethod.POST,body,Product.class);
+		Product productResponse=responseEntity.getBody();
+		return productResponse;
+	}
+
+	@Override
+	public Product update(Product product, Long id) {
+		
+		HttpEntity<Product> body = new HttpEntity<Product>(product);
+		
+		Map<String, String> pathVariablesMap = new HashMap<>();
+		pathVariablesMap.put("id", id.toString());
+		
+		ResponseEntity<Product> responseEntity = this.restClient.exchange("http://products-service/update/{id}", 
+				HttpMethod.PUT,body,Product.class, pathVariablesMap);
+		return responseEntity.getBody();
+	}
+
+	@Override
+	public void delete(Long id) {
+		Map<String, String> pathVariablesMap = new HashMap<>();
+		pathVariablesMap.put("id", id.toString());
+		
+		this.restClient.delete("http://products-service/delete/{id}", pathVariablesMap);
 	}
 
 }
