@@ -15,7 +15,8 @@ import org.springframework.cloud.openfeign.EnableFeignClients;
 //@RibbonClient(name = "products-service")
 @EnableEurekaClient // Se habilita que sea cliente del servidor Eureka
 //@EnableCircuitBreaker // Para usar Hystrix para la tolerancia a fallos y timeouts
-@EnableAutoConfiguration(exclude = {DataSourceAutoConfiguration.class}) //utilizar esto o usar en el commons la dependencia h2
+@EnableAutoConfiguration(exclude = {DataSourceAutoConfiguration.class}) //debido a que al inyectar la dependencia Commons, tiene incluido la dependencia Jpa y va a pedir usar base de datos en item-service.
+																		//Por ello, se agrega esta anotación para excluir la configuración JPA por defecto.
 @SpringBootApplication
 public class ItemsServiceApplication {
 

@@ -1356,7 +1356,7 @@ public class Role implements Serializable {
 }
 </code></pre>
 
-#### 4. Crear DAOS/Repository
+#### 4. Crear DAOS/Repository con Spring Rest Repository
 Aquí se pueden revisar Query Methods:
 https://docs.spring.io/spring-data/jpa/docs/current/reference/html/#repositories.query-methods.query-creation
 https://docs.spring.io/spring-data/jpa/docs/current/reference/html/#jpa.query-methods.query-creation
@@ -1386,3 +1386,325 @@ Añadir en el application properties:
 zuul.routes.users.service-id=users-service
 zuul.routes.users.path=/api/users/**
 </code></pre>
+
+
+### 6. Vincular los métodos del Repositorio con Spring Rest Repository
+
+Teniendo un repositorio con Spring Rest Repository:
+
+<pre><code>
+@RepositoryRestResource(path = "users") //Dependencia SpringWeb Rest Repositories
+public interface UserDAO extends PagingAndSortingRepository<User, Long> {
+	
+	public User findByUsername(String username);
+	
+	@Query("select u from User u where u.username=?1 and u.email=?2") //utilizando jpa HQL
+	//@Query(value = "select * from users u where u.username=?1 and u.email=?2", nativeQuery = true)
+	public User getByUsernameAndEmail(String username, String email);
+}
+</code></pre>
+
+Se pueden hacer consultas en Postman de la siguiente manera:
+/api/users/users/search/<metodo>?queryParams
+Por ejemplo: http://localhost:8090/api/users/users/search/findByUsername?username=admin
+
+Para editar esta runta, se añade al método la etiqueta <b>@RestResource(path="nombreURL")</b>
+y para los parámtros la anotación <b>@Param("<nombre>")</b>
+
+<pre><code>
+	@RestResource(path = "search-username")
+	public User findByUsername(@Param("name")String username);
+</code></pre>
+
+#### También se puede modificar la respuesta.
+
+Para esto, se crea una clase <b>@Configuration</b> que implementa la <b>interfaz RepositoryRestConfigurer.</b>
+Se implementa el método <b>@Override configureRepositoryRestConfiguration</b> con el parámetro config que tiene métodos para 
+configurar el Spring Rest Repository, por ejemplo, exposeIdFor que muestra las ids de las clases seleccionadas:
+
+<pre><code>
+@Configuration
+public class RepositoryConfig implements RepositoryRestConfigurer {
+
+	@Override
+	public void configureRepositoryRestConfiguration(RepositoryRestConfiguration config, CorsRegistry cors) {
+		config.exposeIdsFor(User.class,Role.class);
+	}
+
+}
+</code></pre>
+
+### 7. Crear biblioteca commons para usuarios para usarlas en otros microservicios.
+
+Se copian y pegan las clases Role Y User en el commons-service en el paquete entities y se ejecuta en commons-service
+el comando mvnw install para que se ejecute el jar.
+Por último se agrega la dependencia del commons-service en el pom.xml de users-service para que se puedan cambiar los imports sin problema.
+
+<pre><code>
+		dependency
+			groupId com.app.commonservice /groupId
+			artifact Idcommons-service /artifactId
+			version 0.0.1-SNAPSHOT /version
+		</dependency>
+</code></pre>
+
+Y por último, no olvidarse de la anotación @EntityScan el el application.run de user-service para que escanee
+la entidad User y Role.
+
+### 8. Crear microservicio OAuth2 (Servidor de Autorización)
+
+- Dependencias Eureka Client, Spring Web, Dev Tools, OpenFeign y agregar dependencias manuales de Spring Security:
+Se va a utilizar Spring Security Oauth 2.3.8.RELEASE porque desde la 2.4>= se quita el servidor de autorización para crear el token y se tendría
+que llamar a librerías externas a Spring Boot/Spring Security
+
+<b>OAuth2:</b>
+<p>
+		<dependency>
+			<groupId>org.springframework.security.oauth</groupId>
+			<artifactId>spring-security-oauth2</artifactId>
+			<version>2.3.8.RELEASE</version>
+		</dependency>
+</p>
+<b>JWT</b>
+<p>
+		<dependency>
+			<groupId>org.springframework.security</groupId>
+			<artifactId>spring-security-jwt</artifactId>
+			<version>1.1.1.RELEASE</version>
+		</dependency>
+</p>
+<b>JAXB: si se usa Java 11</b>
+<p>
+		<dependency>
+			<groupId>org.glassfish.jaxb</groupId>
+			<artifactId>jaxb-runtime</artifactId>
+		</dependency>
+</p>
+
+- Agregar la dependencia Commons para utilizar las clases User y Role.
+Como este proyecto no maneja base de datos ni persistencia y la dependencia commons si la usa, va a pedir
+una base de datos Jpa.
+Se puede incluir la anotacion en el application.run @EnableAutoConfiguration(exclude = {DataSourceAutoConfiguration.class})
+o agregar la dependencia con la etiqueta exclusions y la dependencia a excluir:
+
+<p>
+		<dependency>
+			<groupId>com.app.commonservice</groupId>
+			<artifactId>commons-service</artifactId>
+			<version>0.0.1-SNAPSHOT</version>
+			<exclusions>
+				<exclusion>
+					<groupId>org.springframework.boot</groupId>
+					<artifactId>spring-boot-starter-data-jpa</artifactId>
+				</exclusion>
+			</exclusions>
+		</dependency>
+</p>
+
+- Configurar el properties:
+
+<pre><code>
+spring.application.name = oauth-server
+server.port=9100
+
+# Eureka Configuration
+eureka.client.service-url.defaultZone = http://localhost:8761/eureka
+
+# Para el servidor de configuraciones
+spring.config.import=optional:configserver:
+</code></pre>
+
+- Crear Feign Client
+
+Añadir en el application.run la anotación @EnableFeignClients y ahora crear una interfaz con
+la anotación @FeignClient(name = "users-service") con el microservicio a utilizar. 
+Se agregan los métodos en la interfaz.
+
+<pre><code>
+@FeignClient(name = "users-service")
+public interface UserFeignClient {
+	
+	@GetMapping("/users/search-username")
+	public User findByUsername(@RequestParam String username);
+
+}
+</code></pre>
+
+- Implementar la clase de Login con UserDetailsService y Feign Client
+
+Esta va a ser la clase que se va a utilizar para el método de login.
+Se crea una clase UserService que va a implementar la interfaz de Spring UserDetailService.
+Se tendrá que implementar el método <b>@Override loadUserByUsername.</b>
+En este método se necesita crear la lista de authorities con la interfaz GrantedAuthority y las intancias
+SimpleGrantedAuthority.
+
+<pre><code>
+@Service
+public class UserService implements UserDetailsService {
+	@Override
+	public UserDetails loadUserByUsername(String username) throws UsernameNotFoundException {
+		User user = this.userFeignClient.findByUsername(username);
+		
+		if(user == null) {
+			logger.error("Error: username "+username+" not found.");
+			throw new UsernameNotFoundException("Error: username "+username+" not found.");
+		}
+		
+		List<GrantedAuthority> authorities = user.getRoles().stream().map(
+				role -> new SimpleGrantedAuthority(role.getName())
+				)
+				.peek(authority -> logger.info("Role: "+authority.getAuthority()))
+				.collect(Collectors.toList());
+		
+		
+		return new org.springframework.security.core.userdetails.User(user.getUsername(), user.getPassword(), user.getEnabled(),
+				true, true, true, authorities);
+	}
+}
+</code></pre>
+
+- Añadir Spring Security Config y registrar UserDetailService
+
+Se crea una clase que implementa la interfaz WebSecurityConfigurerAdapter que tendrá
+2 métodos para sobrescribir. Configure() para indicar el servicio UserService para encontrar el usuario y el password encoder.
+El otro el AuthenticationManager para la clase de authenticacion.
+
+<pre><code>
+@Configuration
+public class SpringSecurityConfig extends WebSecurityConfigurerAdapter {
+	
+	@Autowired
+	private UserDetailsService userService; //Spring buscara el bean que implemente esta interfaz, en este caso UserService
+	
+	@Bean
+	public static BCryptPasswordEncoder passwordEncoder() {
+		return new BCryptPasswordEncoder();
+	}
+
+	@Override
+	@Bean
+	protected AuthenticationManager authenticationManager() throws Exception {
+		return super.authenticationManager();
+	}
+
+	@Override
+	@Autowired
+	protected void configure(AuthenticationManagerBuilder auth) throws Exception {
+		auth.userDetailsService(this.userService).passwordEncoder(passwordEncoder());
+	}
+}
+</code></pre>
+
+<b>WebSecurityConfigurerAdapter está deprecated! </b>
+En su lugar, utilizar FilterChain
+
+@Configuration
+public class SpringSecurityConfig {
+	
+	@Bean
+	public static BCryptPasswordEncoder passwordEncoder() {
+		return new BCryptPasswordEncoder();
+	}
+	
+	public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
+        http
+            .authorizeHttpRequests((authz) -> authz
+                .anyRequest().authenticated()
+            ).build();
+        return http.build();
+    }
+	
+}
+
+- Crear el @Configuration AuthorizationServerConfig
+
+Es una clase que extenderá de AuthorizationServerConfigurerAdapter y tendrá 3 métodos:
+
+1. public void configure(AuthorizationServerEndpointsConfigurer endpoints)
+
+Que es el encargado de configurar, almacenar y firmar el token con una clave secreta.
+
+<pre><code>
+
+	@Override
+	public void configure(AuthorizationServerEndpointsConfigurer endpoints) throws Exception {
+
+		endpoints
+		.authenticationManager(this.authenticationManager)
+		.tokenStore(tokenStore())
+		.accessTokenConverter(accesTokenConverter());
+	}
+
+	@Bean
+	public JwtTokenStore tokenStore() {
+		return new JwtTokenStore(accesTokenConverter());
+	}
+
+	@Bean
+	public JwtAccessTokenConverter accesTokenConverter() {
+		JwtAccessTokenConverter tokenConverter = new JwtAccessTokenConverter();
+		
+		// Firmar el token
+		tokenConverter.setSigningKey("key_secret");
+		return tokenConverter;
+	} 
+</code></pre>
+
+2. public void configure(ClientDetailsServiceConfigurer clients)
+
+Se configuran los clientes frontend que van a usar la aplicación, por ejemplo, Postman,React,Angular,etc.
+Se encarga de crear una doble autenticación con el estandar Oauth. Es decir, con Auth va tener que autenticarse
+con los credenciales del usuario y además, se creará una autenticación con contraseña con el cliente frontend.
+
+<pre><code>
+	@Override
+	public void configure(ClientDetailsServiceConfigurer clients) throws Exception {
+		clients.inMemory()
+		.withClient("angularapp") //se asigna un nombre al cliente
+		.secret(this.passwordEncoder.encode("12345")) //se asigna una contraseña
+		.scopes("read", "write") //se establecen los permisos
+		.authorizedGrantTypes("password", "refresh_token")
+		.accessTokenValiditySeconds(3600); //Con lo que se hará la autenticación. Con refresh_token para obtener un token de acceso renovado justo antes que caduque el actual
+		
+		/** REGISTRAR OTRO CLIENTE
+		 * .and().
+		withClient("reactapp") //se asigna un nombre al cliente
+		.secret(this.passwordEncoder.encode("12345")) //se asigna una contraseña
+		.scopes("read", "write") //se establecen los permisos
+		.authorizedGrantTypes("password", "refresh_token").accessTokenValiditySeconds(3600); 
+		**/
+	}
+</code></pre>
+
+3. public void configure(AuthorizationServerSecurityConfigurer security)
+Es el permiso que va a tener los endpoints en el servidor de autorización
+
+<pre><code>
+	@Override
+	public void configure(AuthorizationServerSecurityConfigurer security) throws Exception {
+		security.tokenKeyAccess("permitAll()") // permitAll() es un método de Spring Security para generar el token y autenticarse con oauth/login y que sea publico para que todo el mundo se pueda autenticar.
+		.checkTokenAccess("isAuthenticated()"); // para validar el token, se llama al método isAuthenticated() que validará que el usuario esté autenticado.
+	}
+</code></pre>
+
+- Agregar la ruta en el api gateway Zuul Server
+Se modifica el <b>archivo properties de zuul-server</b>. Destacar que se tienen que quitar de las cabeceras las cookies para
+que funcione la autenticación en el servidor Zuul:
+
+<pre><code>
+## Security
+zuul.routes.security.service-id=oauth-server
+zuul.routes.security.path=/api/security/**
+## Quitar de las cabeceras las Cookies para habilitar la autenticaicón con Zuul
+zuul.routes.security.sensitive-headers=Cookie, Set-Cookie
+</code></pre>
+
+- Login con Postman.
+
+--> Método: POST
+--> URL: http://localhost:8090/api/security/oauth/token
+--> Authorization/Basic Authorization -> username:frontendapp password:12345
+--> Body: x-wwww-form-urlencoded
+	-username: admin
+	-password: 12345
+	-grant_type: password (esto indica el tipo de autenticación)
