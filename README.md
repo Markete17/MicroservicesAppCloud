@@ -1,8 +1,20 @@
 # MicroservicesAppCloud - Marcos Ruiz Muñoz 
 Formación en microservicios con Spring Cloud
 
+**Índice**   
+1. [Rest Template y Feign Client](#id1)
+2. [Balanceo de carga con Ribbon](#id2)
+3. [Servidor Eureka](#id3)
+4. [Escalar microservicios con puerto dinámico](#id4)
+5. [Hystrix](#id5)
+6. [Servidor Zuul API Gateway](#id6)
+7. [Spring Cloud API Gateway (Alternativa a Zuul)](#id7)
+8. [Resilence4J Circuit Breaker](#id8)
+9. [Servidor de configuración con Spring Cloud Config Server](#id9)
+10. [Biblioteca Commons para reutilzar código en microservicios](#id10)
+11. [Spring Cloud Security: OAuth2 y JWT](#id11)
 
-## Rest Template y Feign Client
+## Rest Template y Feign Client<a name="id1"></a>
 Se usan para que un microservicio utilice otro microservicio.
 
 ### 1. Rest Template
@@ -105,7 +117,7 @@ public interface ClientRestProduct {
 
 </code></pre>
 
-## Balanceo de carga con Ribbon
+## Balanceo de carga con Ribbon<a name="id2"></a>
 
 Ejemplo de balanceo de carga.
 Se crean dos instancias del microservicio productos (uno en el puerto 8001 y otro en el 9001)
@@ -141,7 +153,7 @@ se quita la línea agregada (-Dserver.port = 9001) del cuadro de texto VM argume
 - De esta forma están ejecutándose 2 instancias de productos uno en el 9001 y otro en el 8001.
 
 
-## Servidor con EUREKA
+## Servidor con EUREKA <a name="id3"></a>
 Eureka es un servidor para el registro y localización de microservicios, balanceo de carga y tolerancia a fallos. La función de Eureka es registrar las diferentes instancias de microservicios existentes, su localización, estado, metadatos...
 
 Por defecto Euroke se registra así mismo como servidor y como cliente/microservicio. Interesa que se comporte como servidor poniendo en properties:
@@ -184,7 +196,7 @@ eliminar la anotación @RibbonClient(name = "products-service") del app run clas
 Al acceder al panel de Eureka, se podrán ver las instancias de microservicios.
 
 
-## Escalar microservicios con puerto dinámico
+## Escalar microservicios con puerto dinámico <a name="id4"></a>
 La idea es que Spring de forma automática asigne el puerto de los servicios para hacer la aplicación más escalable. Para ello:
 - Modificar en el archivo properties de cada microservicio, el server.port = ${PORT:0}
 - Añadir una nueva línea de configuración de Eureka para que se asigne una url dinámica al servicio:
@@ -193,7 +205,7 @@ La idea es que Spring de forma automática asigne el puerto de los servicios par
 eureka.instance.instance-id=${spring.application.name}:${spring.application.instance_id:${random.value}}
 </code></pre>
 
-## Hystrix
+## Hystrix <a name="id5"></a>
 
 ### Tolerancia a fallos,excepciones con Hystrix
 Por ejemplo, cuando alcanza cierto límite de fallos en peticiones en alguna instancia, ya se deja de hacer
@@ -258,7 +270,7 @@ ribbon.ReadTimeout: 10000
 - Ahora al hacer el ejemplo del timeout de 2 segundos en el método, se debería de esperar esos 2 segundos y ejecutará
 el método original.
 
-## Servicio Zuul API Gateway
+## Servicio Zuul API Gateway <a name="id6"></a>
 Para crear una puerta de entrada/puerta de enlace a todos los microservicios.
 Va a poner establecer un enrutamiento dinámico para cada microservicio.
 Todas las peticiones que pasan por Zuul API Gateway vienen con balanceo de carga y se integra con Ribbon y configurado por defecto.
@@ -363,7 +375,7 @@ ribbon.ReadTimeout: 60000
 Cabe indicar que si solo se pone en zuul-server y se descomenta en item-server, no va a esperar y entrará en la ruta alternativa.
 Por eso, es necesario ponerlo en ambos proyectos para que espere los 2 segundos y ejecute el método original y no el alternativo.
 
-## Spring Cloud API Gateway (Alternativa a Zuul)
+## Spring Cloud API Gateway (Alternativa a Zuul) <a name="id7"></a>
  Viene a reemplazar Zuul. Es un servidor de enrutamiento dinámico con filtros, seguridad, autorización, etc.
  
  - Existen dos Gateway: Zuul Netflix (mantenimiento pero aún se usa) y Spring Cloud Gateway (se recomienda y se usa para programación reactiva)
@@ -618,7 +630,7 @@ public class ExampleGatewayFilterFactory extends AbstractGatewayFilterFactory<Ex
  Si no se cumplen todas estas reglas, da el siguiente error: 404 Not Found.
  Hay muchos más predicates que se pueden encontrar en: https://docs.spring.io/spring-cloud-gateway/docs/current/reference/html/#gateway-request-predicates-factories
  
-## Resilence4J Circuit Breaker
+## Resilence4J Circuit Breaker<a name="id8"></a>
 Viene a reemplazar a Hystrix. Muchas veces en un ecosistema de microservicios la comunicación puede fallar, puede que tarde demasiado en responder
 o que el servicio arroje aguna excepción o simplemente que el servicio no esté en disponible.
 La solución es implementar el patrón Circuit Breaker con Resilence4J.
@@ -889,7 +901,7 @@ sin estar disponible para hacer método alternativo
               fallbackUri: forward:/api/items/2/quantity/3
 </code></pre>
 
-## Servidor de configuración con Spring Cloud Config Server
+## Servidor de configuración con Spring Cloud Config Server <a name="id9"></a>
 
 Es un proyecto que va a tener las configuraciones de todos los microservicios de la aplicación.
 
@@ -1147,7 +1159,7 @@ Indicará en la respuesta que se han cambiado correctamente los campos:
 del servidor como server.port</b>
 
 
-## Biblioteca Commons para reutilzar código en microservicios
+## Biblioteca Commons para reutilzar código en microservicios <a name="id10"></a>
 La case Items y products son muy parecidos. Se puede crear un microservicio a parte para reutilizar código.
 - Crear un nuevo proyecto commons-service con dependencias Jpa
 - Quitar el proyecto main run ya que es un proyecto de librería y no se va a ejecutar.
@@ -1188,7 +1200,7 @@ public class ProductsServiceApplication {
 }
 </code></pre>
 
-## Spring Cloud Security: OAuth2 y JWT
+## Spring Cloud Security: OAuth2 y JWT <a name="id11"></a>
 
 ### Introducción a JWT (JSON Web Token)
 
