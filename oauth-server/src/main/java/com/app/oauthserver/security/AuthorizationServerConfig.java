@@ -1,31 +1,44 @@
 package com.app.oauthserver.security;
 
+import java.util.Arrays;
+
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.cloud.context.config.annotation.RefreshScope;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.core.env.Environment;
 import org.springframework.security.authentication.AuthenticationManager;
-import org.springframework.security.config.annotation.authentication.configuration.AuthenticationConfiguration;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.oauth2.config.annotation.configurers.ClientDetailsServiceConfigurer;
 import org.springframework.security.oauth2.config.annotation.web.configuration.AuthorizationServerConfigurerAdapter;
 import org.springframework.security.oauth2.config.annotation.web.configuration.EnableAuthorizationServer;
 import org.springframework.security.oauth2.config.annotation.web.configurers.AuthorizationServerEndpointsConfigurer;
 import org.springframework.security.oauth2.config.annotation.web.configurers.AuthorizationServerSecurityConfigurer;
+import org.springframework.security.oauth2.provider.token.TokenEnhancerChain;
 import org.springframework.security.oauth2.provider.token.store.JwtAccessTokenConverter;
 import org.springframework.security.oauth2.provider.token.store.JwtTokenStore;
 
 @Configuration
 @EnableAuthorizationServer
+@RefreshScope
 public class AuthorizationServerConfig extends AuthorizationServerConfigurerAdapter {
 
 	@Autowired
 	private BCryptPasswordEncoder passwordEncoder;
 	
+	@Autowired
+	private InfoAdditionalToken infoAdditionalToken;
+	
+	@Autowired
+	private Environment env;
+	
+	@Autowired
 	private AuthenticationManager authenticationManager;
 	
+	/* Esto se utilizará cuando se quite el deprecated de Spring Security Config
 	public AuthorizationServerConfig(AuthenticationConfiguration authenticationConfiguration) throws Exception {
 		this.authenticationManager = authenticationConfiguration.getAuthenticationManager();
-	}
+	}*/
 
 	/**
 	 * Es el permiso que va a tener los endpoints en el servidor de autorización
@@ -44,8 +57,8 @@ public class AuthorizationServerConfig extends AuthorizationServerConfigurerAdap
 	@Override
 	public void configure(ClientDetailsServiceConfigurer clients) throws Exception {
 		clients.inMemory()
-		.withClient("postmanapp") //se asigna un nombre al cliente
-		.secret(this.passwordEncoder.encode("12345")) //se asigna una contraseña
+		.withClient(this.env.getProperty("config.security.oauth.client.id")) //se asigna un nombre al cliente
+		.secret(this.passwordEncoder.encode(this.env.getProperty("config.security.oauth.client.secret"))) //se asigna una contraseña
 		.scopes("read", "write") //se establecen los permisos
 		.authorizedGrantTypes("password", "refresh_token")
 		.accessTokenValiditySeconds(3600); //Con lo que se hará la autenticación. Con refresh_token para obtener un token de acceso renovado justo antes que caduque el actual
@@ -67,10 +80,15 @@ public class AuthorizationServerConfig extends AuthorizationServerConfigurerAdap
 	@Override
 	public void configure(AuthorizationServerEndpointsConfigurer endpoints) throws Exception {
 
+		// Para añadir información adicional al token
+		TokenEnhancerChain tokenEnhancerChain = new TokenEnhancerChain();
+		tokenEnhancerChain.setTokenEnhancers(Arrays.asList(infoAdditionalToken,accesTokenConverter()));
+		// ----
 		endpoints
 		.authenticationManager(this.authenticationManager)
 		.tokenStore(tokenStore())
-		.accessTokenConverter(accesTokenConverter());
+		.accessTokenConverter(accesTokenConverter())
+		.tokenEnhancer(tokenEnhancerChain);
 	}
 
 	@Bean
@@ -83,7 +101,7 @@ public class AuthorizationServerConfig extends AuthorizationServerConfigurerAdap
 		JwtAccessTokenConverter tokenConverter = new JwtAccessTokenConverter();
 		
 		// Firmar el token
-		tokenConverter.setSigningKey("key_secret");
+		tokenConverter.setSigningKey(this.env.getProperty("config.security.oauth.jwt.key"));
 		return tokenConverter;
 	}
 	

@@ -1453,9 +1453,9 @@ la entidad User y Role.
 
 ### 8. Crear microservicio OAuth2 (Servidor de Autorización)
 
-- Dependencias Eureka Client, Spring Web, Dev Tools, OpenFeign y agregar dependencias manuales de Spring Security:
+- <b>Dependencias Eureka Client, Spring Web, Dev Tools, OpenFeign y agregar dependencias manuales de Spring Security:
 Se va a utilizar Spring Security Oauth 2.3.8.RELEASE porque desde la 2.4>= se quita el servidor de autorización para crear el token y se tendría
-que llamar a librerías externas a Spring Boot/Spring Security
+que llamar a librerías externas a Spring Boot/Spring Security</b>
 
 <b>OAuth2:</b>
 <p>
@@ -1481,7 +1481,7 @@ que llamar a librerías externas a Spring Boot/Spring Security
 		</dependency>
 </p>
 
-- Agregar la dependencia Commons para utilizar las clases User y Role.
+- <b>Agregar la dependencia Commons para utilizar las clases User y Role.</b>
 Como este proyecto no maneja base de datos ni persistencia y la dependencia commons si la usa, va a pedir
 una base de datos Jpa.
 Se puede incluir la anotacion en el application.run @EnableAutoConfiguration(exclude = {DataSourceAutoConfiguration.class})
@@ -1501,7 +1501,7 @@ o agregar la dependencia con la etiqueta exclusions y la dependencia a excluir:
 		</dependency>
 </p>
 
-- Configurar el properties:
+- <b>Configurar el properties:</b>
 
 <pre><code>
 spring.application.name = oauth-server
@@ -1514,7 +1514,7 @@ eureka.client.service-url.defaultZone = http://localhost:8761/eureka
 spring.config.import=optional:configserver:
 </code></pre>
 
-- Crear Feign Client
+- <b>Crear Feign Client</b>
 
 Añadir en el application.run la anotación @EnableFeignClients y ahora crear una interfaz con
 la anotación @FeignClient(name = "users-service") con el microservicio a utilizar. 
@@ -1530,7 +1530,7 @@ public interface UserFeignClient {
 }
 </code></pre>
 
-- Implementar la clase de Login con UserDetailsService y Feign Client
+- <b>Implementar la clase de Login con UserDetailsService y Feign Client</b>
 
 Esta va a ser la clase que se va a utilizar para el método de login.
 Se crea una clase UserService que va a implementar la interfaz de Spring UserDetailService.
@@ -1543,27 +1543,30 @@ SimpleGrantedAuthority.
 public class UserService implements UserDetailsService {
 	@Override
 	public UserDetails loadUserByUsername(String username) throws UsernameNotFoundException {
+		
+		try {
+			
 		User user = this.userFeignClient.findByUsername(username);
-		
-		if(user == null) {
-			logger.error("Error: username "+username+" not found.");
-			throw new UsernameNotFoundException("Error: username "+username+" not found.");
-		}
-		
+
 		List<GrantedAuthority> authorities = user.getRoles().stream().map(
 				role -> new SimpleGrantedAuthority(role.getName())
 				)
 				.peek(authority -> logger.info("Role: "+authority.getAuthority()))
 				.collect(Collectors.toList());
 		
+		logger.info("Authenticated User: "+username);
 		
 		return new org.springframework.security.core.userdetails.User(user.getUsername(), user.getPassword(), user.getEnabled(),
 				true, true, true, authorities);
+		} catch (FeignException e) {
+				logger.error("Error: username "+username+" not found.");
+				throw new UsernameNotFoundException("Error: username "+username+" not found.");
+		}
 	}
 }
 </code></pre>
 
-- Añadir Spring Security Config y registrar UserDetailService
+- <b>Añadir Spring Security Config y registrar UserDetailService</b>
 
 Se crea una clase que implementa la interfaz WebSecurityConfigurerAdapter que tendrá
 2 métodos para sobrescribir. Configure() para indicar el servicio UserService para encontrar el usuario y el password encoder.
@@ -1616,7 +1619,7 @@ public class SpringSecurityConfig {
 	
 }
 
-- Crear el @Configuration AuthorizationServerConfig
+- <b>Crear el @Configuration AuthorizationServerConfig</b>
 
 Es una clase que extenderá de AuthorizationServerConfigurerAdapter y tendrá 3 métodos:
 
@@ -1708,3 +1711,248 @@ zuul.routes.security.sensitive-headers=Cookie, Set-Cookie
 	-username: admin
 	-password: 12345
 	-grant_type: password (esto indica el tipo de autenticación)
+
+- <b>Añadir información adicional al Token</b>
+Primero crear una clase <b>@Component InfoAdditionalToken</b> que implemente la interfaz <b>TokenEnhancer.</b>
+Se implementa el método @Override <b>enhance()</b>
+La variable accessToken es el token al que se le va a añadir la información y authentication es
+la variable que presenta al usuario autenticado.
+accesToken necesita ser casteado a DefaultOAuth2AccessToken para acceder al método setAdditionalInformation().
+
+<pre><code>
+	@Override
+	public OAuth2AccessToken enhance(OAuth2AccessToken accessToken, OAuth2Authentication authentication) {
+		Map<String, Object> info = new HashMap<>();
+		
+		User user = this.userService.findByUsername(authentication.getName());
+		info.put("firstName", user.getFirstName());
+		info.put("lastName", user.getLastName());
+		info.put("email", user.getEmail());
+		
+		((DefaultOAuth2AccessToken) accessToken).setAdditionalInformation(info);
+		return accessToken;
+	}
+</code></pre>
+
+
+Después, en el método configure del AuthorizationServerConfig, agregar el Token Enhancer Chain al token que le agregará la 
+información
+
+<pre><code>
+	@Override
+	public void configure(AuthorizationServerEndpointsConfigurer endpoints) throws Exception {
+
+		// Para añadir información adicional al token
+		TokenEnhancerChain tokenEnhancerChain = new TokenEnhancerChain();
+		tokenEnhancerChain.setTokenEnhancers(Arrays.asList(infoAdditionalToken,accesTokenConverter()));
+		// ----
+		endpoints
+		.authenticationManager(this.authenticationManager)
+		.tokenStore(tokenStore())
+		.accessTokenConverter(accesTokenConverter())
+		.tokenEnhancer(tokenEnhancerChain);
+	}
+</code></pre>
+
+- <b>Configurando Zuul como servidor de Recurso (Resource Server)</b>
+Primero se tienen que añadir las dependencias jaxb, oauth2 y jwt al microservicio zuul-server.
+Crear una clase que tendrá la configuración del servidor de configuración de recursos (Resource Server).
+Aquí se administraran y protegerán las rutas con el método configure:
+
+<pre><code>
+@Configuration
+@EnableResourceServer
+public class ResourceServerConfig extends ResourceServerConfigurerAdapter {
+
+	@Override
+	public void configure(ResourceServerSecurityConfigurer resources) throws Exception {
+		resources.tokenStore(tokenStore());
+	}
+
+	@Override
+	public void configure(HttpSecurity http) throws Exception {
+		http.authorizeRequests().antMatchers("/api/security/oauth/token").permitAll()
+		.antMatchers(HttpMethod.GET,"/api/products/","api/items/","/api/users/users/").permitAll()
+		.antMatchers(HttpMethod.GET,"/api/products/{id}",
+				"/api/items/{id}/quantity/{quantity}",
+				"/api/users/users/{id}")
+				.hasAnyRole("ADMIN","USER")
+		.antMatchers("/api/products/**","/api/items/**","api/users/**").hasRole("ADMIN")
+		.anyRequest().authenticated();
+	}
+
+}
+
+</code></pre>
+
+- <b>Crear una configuración para el servidor de configuración de OAuth</b>
+
+Ir al repositorio Git donde está la configuración y crear un nuevo archivo llamado application.properties que tendrá
+la consiguración del cliente y la firma del token:
+
+<pre><code>
+config.security.oauth.client.id=postmanapp
+config.security.oauth.client.secret=12345
+config.security.oauth.jwt.key=key_secret
+</code></pre>
+
+No olvidarse de hacer commit al repositorio de configuración.
+
+Ahora es necesario añadir la <b>dependencia Config Client</b> tanto a oauth-server como a zuul-server para que puedan usar
+el servidor de configuración.
+
+Al implementar la dependencia Config Client, estos microservicios tienen que tener el archivo bootstrap.properties:
+
+Para oauth-server:
+
+<pre><code>
+spring.application.name=oauth-server
+spring.cloud.config.uri=http://localhost:8888
+management.endpoints.web.exposure.include=*
+</code></pre>
+
+Para zuul-server:
+
+<pre><code>
+spring.application.name=zuul-service-server
+spring.cloud.config.uri=http://localhost:8888
+management.endpoints.web.exposure.include=*
+</code></pre>
+
+Ahora en AuthorizationServerConfig se puede usar Environment para acceder a estas variables del repositorio 
+del servidor de configuracion y también añadir @RefreshScope
+
+<pre><code>
+clients.inMemory()
+.withClient(this.env.getProperty("config.security.oauth.client.id"))
+.secret(this.passwordEncoder.encode(this.env.getProperty("config.security.oauth.client.secret")))
+
+tokenConverter.setSigningKey(this.env.getProperty("config.security.oauth.jwt.key"));
+</code></pre>
+
+Y en Zuul-Server igual se puede hacer también con @Value y @RefreshScope
+
+	@Value("${config.security.oauth.jwt.key}")
+	private String jwtKey;
+	
+	tokenConverter.setSigningKey(jwtKey);
+	
+- <b>Configurar Cors en la aplicación</b>
+
+CORS es un mecanismo que utiliza las cabeceras HTTP para permitir que una aplicación cliente que está en otro
+servidor al backend tenga los permisos de acceder a los recursos o endpoints.
+Para esto se tendrá que añadir que configurar el cors en el ResourceServerConfig y añadirlo al http para habilitar cors en la aplicación:
+
+<pre><code>
+
+		....
+		.anyRequest().authenticated()
+		.and().cors().configurationSource(corsConfigurationSource());
+
+
+	@Bean
+	public CorsConfigurationSource corsConfigurationSource() {
+		CorsConfiguration corsConfiguration = new CorsConfiguration();
+		corsConfiguration.addAllowedOrigin("*"); // Con el asterisco se permite cualquier origen, si solo se quiere permitir una lista de origenes, es el método setAllowedOrigins("http://localhost:4090",...)
+		corsConfiguration.setAllowedMethods(Arrays.asList("POST","GET","PUT","DELETE","OPTIONS")); // OPTIONS es importante ya que Oauth2 lo utiliza
+		corsConfiguration.setAllowCredentials(true);
+		corsConfiguration.setAllowedHeaders(Arrays.asList("Authorization","Content-Type"));
+		
+		UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
+		
+		source.registerCorsConfiguration("/**", corsConfiguration); // ** para aplicarlo a todas las rutas
+		return source;
+	}
+	
+	/**
+	 * Para configurarlo a nivel global como un filtro
+	 */
+	@Bean
+	public FilterRegistrationBean<CorsFilter> corsFilter(){
+		FilterRegistrationBean<CorsFilter> bean = new FilterRegistrationBean<CorsFilter>(new CorsFilter(corsConfigurationSource()));
+		bean.setOrder(Ordered.HIGHEST_PRECEDENCE); //MAXIMA Prioridad
+		return bean;
+	}
+</code></pre>
+
+- <b>Manejar eventos de éxito y fracaso en la autenticación </b>
+
+Crear un paquete events en el server-oauth que se encargará de manejar estos eventos.
+Crear una clase que implemente la interfaz <b>AuthenticationEventPublisher </b> que implementará dos métodos.
+Uno para cuando el login sea correcto y otro para cuando sea erróneo:
+
+<pre><code>
+@Component
+public class AuthenticationSuccessErrorHandler implements AuthenticationEventPublisher {
+
+	private Logger logger = LoggerFactory.getLogger(AuthenticationSuccessErrorHandler.class);
+	
+	@Override
+	public void publishAuthenticationSuccess(Authentication authentication) {
+		UserDetails user = (UserDetails) authentication.getPrincipal();
+		
+		String successMessage = "Success Login: "+ user.getUsername();
+		System.out.println(successMessage);
+		logger.info(successMessage);
+	}
+
+	@Override
+	public void publishAuthenticationFailure(AuthenticationException exception, Authentication authentication) {
+		String errorMessage = "Login Error: "+exception.getMessage();
+		System.out.println(errorMessage);
+		logger.info(errorMessage);
+	}
+
+}
+</code></pre>
+
+- <b>Implementar evento 3 intentos login</b>
+
+Primero, agregar a la entity User el parámetro attemps para indicar los intentos de logueo del usuario.
+No olvidarse de que cada vez que se actualiza el commons, hay que generar el jar: mvnw clean install.
+
+Agregar en el cliente Feign Usuario el método update
+
+<pre><code>
+	@PutMapping("/users/{id}")
+	public User update(@RequestBody User user, @PathVariable Long id);
+</code></pre>
+
+Si falla el login, incrementar el contador y actualizar usuario. Si supera 3 intentos, deshabilita el usuario.
+<pre><code>
+	@Override
+	public void publishAuthenticationFailure(AuthenticationException exception, Authentication authentication) {
+		....
+		try {
+			User user = this.userService.findByUsername(authentication.getName());
+			if (user.getAttempts() == null) {
+				user.setAttempts(0);
+			}
+			user.setAttempts(user.getAttempts()+1);
+			
+			
+			if(user.getAttempts()>=3) {
+				user.setEnabled(false);
+			}
+			
+			this.userService.update(user, user.getId());
+			
+		} catch (FeignException e) {
+			logger.error(String.format("User %s does not exist", authentication.getName()));
+		}
+	}
+</code></pre>
+Si acierta el login, se reinicia el contador:
+<pre><code>
+	@Override
+	public void publishAuthenticationSuccess(Authentication authentication) {
+		
+		.....
+		
+		User loginUser = this.userService.findByUsername(authentication.getName());
+		if(loginUser.getAttempts() != null && loginUser.getAttempts() > 0) {
+			loginUser.setAttempts(0);
+			this.userService.update(loginUser, loginUser.getId());
+		}
+	}
+</code></pre>

@@ -16,8 +16,10 @@ import org.springframework.stereotype.Service;
 import com.app.commonservice.models.entities.User;
 import com.app.oauthserver.clients.UserFeignClient;
 
+import feign.FeignException;
+
 @Service
-public class UserService implements UserDetailsService {
+public class UserService implements UserDetailsService,IUserService {
 
 	@Autowired
 	private UserFeignClient userFeignClient;
@@ -26,13 +28,11 @@ public class UserService implements UserDetailsService {
 	
 	@Override
 	public UserDetails loadUserByUsername(String username) throws UsernameNotFoundException {
+		
+		try {
+			
 		User user = this.userFeignClient.findByUsername(username);
-		
-		if(user == null) {
-			logger.error("Error: username "+username+" not found.");
-			throw new UsernameNotFoundException("Error: username "+username+" not found.");
-		}
-		
+
 		List<GrantedAuthority> authorities = user.getRoles().stream().map(
 				role -> new SimpleGrantedAuthority(role.getName())
 				)
@@ -43,6 +43,20 @@ public class UserService implements UserDetailsService {
 		
 		return new org.springframework.security.core.userdetails.User(user.getUsername(), user.getPassword(), user.getEnabled(),
 				true, true, true, authorities);
+		} catch (FeignException e) {
+				logger.error("Error: username "+username+" not found.");
+				throw new UsernameNotFoundException("Error: username "+username+" not found.");
+		}
+	}
+
+	@Override
+	public User findByUsername(String username) {
+		return this.userFeignClient.findByUsername(username);
+	}
+
+	@Override
+	public User update(User user, Long id) {
+		return this.userFeignClient.update(user, id);
 	}
 
 }

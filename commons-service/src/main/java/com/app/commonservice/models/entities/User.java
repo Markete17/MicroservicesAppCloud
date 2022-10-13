@@ -40,6 +40,8 @@ public class User implements Serializable {
 	@Column(unique = true, length = 100)
 	private String email;
 	
+	private Integer attempts;
+	
 	// Para que en la consulta solo traiga al usuario y no venga con los roles.
 	// Los roles solo se van a invocar cuando se llame al getRoles()
 	@ManyToMany(fetch = FetchType.LAZY) 
@@ -115,6 +117,14 @@ public class User implements Serializable {
 
 	public void setRoles(List<Role> roles) {
 		this.roles = roles;
+	}
+
+	public Integer getAttempts() {
+		return attempts;
+	}
+
+	public void setAttempts(Integer attempts) {
+		this.attempts = attempts;
 	}
 
 }
