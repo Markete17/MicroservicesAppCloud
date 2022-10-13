@@ -25,6 +25,8 @@ resilience4j:
 spring:
   application:
     name: gateway-service-server
+  config:
+    import: 'optional:configserver:'
   cloud:
     gateway:
       routes:
@@ -61,6 +63,18 @@ spring:
           #- AddResponseHeader=Content-Type, text/plain add para agregar
           #- SetResponseHeader=Content-Type, text/plain set para editar existentes
           - AddRequestParameter=name, Marcos
+      - id: oauth-server
+        uri: lb://oauth-server
+        predicates:
+          - Path=/api/security/**
+        filters:
+          - StripPrefix=2
+      - id: users-service
+        uri: lb://users-service
+        predicates:
+          - Path=/api/users/**
+        filters:
+          - StripPrefix=2
 server:
   port: 8090
 eureka:

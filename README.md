@@ -13,6 +13,7 @@ Formación en microservicios con Spring Cloud
 9. [Servidor de configuración con Spring Cloud Config Server](#id9)
 10. [Biblioteca Commons para reutilzar código en microservicios](#id10)
 11. [Spring Cloud Security: OAuth2 y JWT](#id11)
+12. [Spring Cloud Security con Spring Cloud Gateway](#id12)
 
 ## Rest Template y Feign Client<a name="id1"></a>
 Se usan para que un microservicio utilice otro microservicio.
@@ -686,7 +687,8 @@ Ahora solo falta añadir las dependencias.
 
 Spring Cloud boostrap no tiene nada que ver con Resilence4J pero
 se usará para implementar un archivo de configuración y añadir el parámetro en properties.
-
+Esto es porque a partir de la 2.4>= requiere poner esto
+para tener el servidor de configuración.
 <pre>
 <code>
 spring.config.import=optional:configserver:
@@ -1967,4 +1969,215 @@ Si acierta el login, se reinicia el contador:
 			this.userService.update(loginUser, loginUser.getId());
 		}
 	}
+</code></pre>
+
+## Spring Cloud Security con Spring Cloud Gateway <a name="id12"></a>
+
+### Configurando el servidor Spring Cloud Gateway
+-Agregar 3 nuevas dependencias al microservicio gateway-server: Spring Security, Cloud Bootstrap y Config Client.
+Actualizar el Cloud bootstrap añadiendo el sufijo bootstrap:
+		<dependency>
+			<groupId>org.springframework.cloud</groupId>
+			<artifactId>spring-cloud-starter-bootstrap</artifactId>
+		</dependency>
+
+En el properties de gateway-server, añadir dos nuevas entradas url. Una a la seguridad y otra a los usuarios:
+
+<pre><code>
+      - id: oauth-server
+        uri: lb://oauth-server
+        predicates:
+          - Path=/api/security/**
+        filters:
+          - StripPrefix=2
+      - id: users-service
+        uri: lb://users-service
+        predicates:
+          - Path=/api/users/**
+        filters:
+          - StripPrefix=2
+</code></pre>
+
+Segundo, agregar para habilitar el servidor de configuración. Esto es porque a partir de la 2.4>= requiere poner esto
+para tener el servidor de configuración.
+
+spring:
+  config:
+    import: 'optional:configserver:'
+	
+Tercero, al tener un servidor de configuración, agregar el archivo bootstrap.properties:
+
+<pre><code>
+spring.application.name=gateway-service-server
+spring.cloud.config.uri=http://localhost:8888
+</code></pre>
+
+Por último, agregar la dependencia JJWT: https://github.com/jwtk/jjwt en el pom.xml del api-gateway
+<b>Si da algún tipo de error con la versión de Java >=11, agregar la dependencia JAXB</b>
+		<dependency>
+			<groupId>org.glassfish.jaxb</groupId>
+			<artifactId>jaxb-runtime</artifactId>
+		</dependency>
+Es una librería de JWT para Java.
+
+
+<dependency>
+    <groupId>io.jsonwebtoken</groupId>
+    <artifactId>jjwt-api</artifactId>
+    <version>0.11.5</version>
+</dependency>
+<dependency>
+    <groupId>io.jsonwebtoken</groupId>
+    <artifactId>jjwt-impl</artifactId>
+    <version>0.11.5</version>
+    <scope>runtime</scope>
+</dependency>
+<dependency>
+    <groupId>io.jsonwebtoken</groupId>
+    <artifactId>jjwt-jackson</artifactId>
+    <version>0.11.5</version>
+    <scope>runtime</scope>
+</dependency>
+
+### Implementar la clase Security Config
+
+
+Crear un paquete security y crear una clase SecurityConfig que tenga la anotación @EnableWebFluxSecurity.
+Esta clase va a tener un método bean que devolverá un SecurityWebFilterChain que autorizará las rutas:
+
+<pre><code>
+@EnableWebFluxSecurity
+public class SpringSecurityConfig {
+	
+	@Bean
+	public SecurityWebFilterChain configure(ServerHttpSecurity http) {
+		return http.authorizeExchange()
+				.pathMatchers("/api/security/oauth/**").permitAll()
+				.pathMatchers(HttpMethod.GET,
+						"/api/products/",
+						"/api/items/",
+						"/api/users/users",
+						"/api/items/{id}/quantity/{quantity}",
+						"/api/products/{id}").permitAll()
+				.pathMatchers(HttpMethod.GET,"/api/users/users/{id}").hasAnyRole("ADMIN","USER")
+				.pathMatchers("/api/products/**","/api/items/**","/api/users/users/**").hasRole("ADMIN")
+				.anyExchange()
+				.authenticated()
+				.and()
+				.csrf().disable()
+				.build();
+		
+	}
+}
+
+</code></pre>
+
+### [Extra] Introducción a la programación reactiva Web Flux
+
+La programación reactiva está orientada a flujo de datos similar a las listas y arreglos pero de manera asíncrona y con programación funcional usando expresiones
+lambda, nos permite mediante operadores transformando este flujo hasta un resultado final.
+
+Características:
+- Inmutable
+- Asíncrono
+- Cancelable
+- Orientado a evento
+
+Tipos:
+- Mono [0..1] un solo elemento
+- Flux [0..N] varios elementos
+
+### Componente Authentication Manager Reactive
+
+Para que sea más robusta la secret key, es mejor encriptarlo en base 64 en el método accesTokenConverter auth-server y zuul-server
+tokenConverter.setSigningKey(Base64.getEncoder().encodeToString(this.env.getProperty("config.security.oauth.jwt.key").getBytes()));
+
+Se crea el componente Authentication Manager Reactive que implementará la interfaz <b>ReactiveAuthenticationManager</b>
+
+<pre><code>
+@Component
+public class AuthenticationManagerJwt implements ReactiveAuthenticationManager {
+	
+	@Value("{config.security.oauth.jwt.key}")
+	private String keyJwt;
+
+	@Override
+	@SuppressWarnings("unchecked")
+	public Mono<Authentication> authenticate(Authentication authentication) {
+		//just lo que hace es convertir un objeto normal en uno reactivo
+		// en este caso getCredentials() devolverá el token y se convertira en un objeto reactivo
+		return Mono.just(authentication.getCredentials().toString())
+				.map(token ->{
+					SecretKey key = Keys.hmacShaKeyFor(Base64.getEncoder().encode(keyJwt.getBytes()));
+					return Jwts.parserBuilder().setSigningKey(key).build().parseClaimsJws(token).getBody();
+				})
+				.map(claims -> {
+					String username = claims.get("user_name", String.class);	
+					List<String> roles = claims.get("authorities", List.class);
+					Collection<GrantedAuthority> authorities = roles.stream().map(SimpleGrantedAuthority::new)
+							.collect(Collectors.toList());
+					return new UsernamePasswordAuthenticationToken(username, null, authorities);
+					
+				});
+	}
+}
+</code></pre>
+
+Además es necesario crear la clase JwtAuthenticationFilter que implementa la interfaz WebFilter
+<pre><code>
+@Component
+public class JwtAuthenticationFilter implements WebFilter {
+	
+	@Autowired
+	private ReactiveAuthenticationManager authenticationManager;
+
+	@Override
+	public Mono<Void> filter(ServerWebExchange exchange, WebFilterChain chain) {
+		return Mono.justOrEmpty(exchange.getRequest().getHeaders().getFirst(HttpHeaders.AUTHORIZATION))
+				.filter(authHeader -> authHeader.startsWith("Bearer "))
+				.switchIfEmpty(chain.filter(exchange).then(Mono.empty()))
+				.map(token -> token.replace("Bearer ", ""))
+				.flatMap(token ->authenticationManager.authenticate(new UsernamePasswordAuthenticationToken(null, token)))
+				.flatMap(authentication -> chain.filter(exchange).contextWrite(ReactiveSecurityContextHolder.withAuthentication(authentication)));
+	}
+
+}
+</code></pre>
+
+### Registrar filtro JwtAuthenticationFilter en SpringSecurity
+
+Se añade la línea en SecurityWebFilterChain.
+.addFilterAt(authenticationFilter, SecurityWebFiltersOrder.AUTHENTICATION)
+
+
+<pre><code>
+@EnableWebFluxSecurity // Habilitar la seguridad en Web Flux. Es una clase que no implementa nada
+//Con esta anotación, se va a tener una anotación Bean para configurar las rutas de seguridad.
+public class SpringSecurityConfig {
+	
+	@Autowired
+	private JwtAuthenticationFilter authenticationFilter;
+	
+	@Bean
+	public SecurityWebFilterChain configure(ServerHttpSecurity http) {
+		return http.authorizeExchange()
+				.pathMatchers("/api/security/oauth/**").permitAll()
+				.pathMatchers(HttpMethod.GET,
+						"/api/products/",
+						"/api/items/",
+						"/api/users/users",
+						"/api/items/{id}/quantity/{quantity}",
+						"/api/products/{id}").permitAll()
+				.pathMatchers(HttpMethod.GET,"/api/users/users/{id}").hasAnyRole("ADMIN","USER")
+				.pathMatchers("/api/products/**","/api/items/**","/api/users/users/**").hasRole("ADMIN")
+				.anyExchange()
+				.authenticated()
+				.and()
+				.addFilterAt(authenticationFilter, SecurityWebFiltersOrder.AUTHENTICATION)
+				.csrf().disable()
+				.build();
+		
+	}
+
+}
 </code></pre>
