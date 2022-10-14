@@ -14,6 +14,8 @@ Formación en microservicios con Spring Cloud
 10. [Biblioteca Commons para reutilzar código en microservicios](#id10)
 11. [Spring Cloud Security: OAuth2 y JWT](#id11)
 12. [Spring Cloud Security con Spring Cloud Gateway](#id12)
+13. [Migrar base de datos MySQL](#id13)
+14. [Crear base de datos PostgreSQL](#id14)
 
 ## Rest Template y Feign Client<a name="id1"></a>
 Se usan para que un microservicio utilice otro microservicio.
@@ -2180,4 +2182,76 @@ public class SpringSecurityConfig {
 	}
 
 }
+</code></pre>
+
+
+## Migrar base de datos MySQL <a name="id13"></a>
+
+1. Instalación de MySQL community: https://dev.mysql.com/downloads/windows/installer/8.0.html
+2. Crear esquema de base de datos en MySQL workbench
+3. Agregar la dependencia MySQL Driver.
+4. Modificar el application.properties para vincular mysql.
+
+Para buscar la zona horaria: https://en.wikipedia.org/wiki/List_of_tz_database_time_zones
+<pre><code>
+# MySQL Configuration
+spring.datasource.url=jdbc:mysql://localhost:3306/db_springboot_cloud?serverTimezone=Europe/Madrid
+spring.datasource.username=root
+spring.datasource.password=1234
+spring.datasource.driver-class-name=com.mysql.cj.jdbc.Driver
+spring.jpa.database-platform=org.hibernate.dialect.MySQL8Dialect
+spring.jpa.hibernate.ddl-auto=create
+
+# Debugear Hibernate
+logging.level.org.hibernate.SQL= debug
+</code></pre>
+
+5. Agregar la dependencia Spring Cloud Starter bootstrap
+<dependency>
+			<groupId>org.springframework.cloud</groupId>
+			<artifactId>spring-cloud-starter-bootstrap</artifactId>
+</dependency>
+
+6. Añadir la configuración al servidor de configuración.
+
+- Crear en el repositorio de configuración un nuevo archivo: products-service-dev.properties que tendrá lo del punto 4.
+No olvidar hacer el commit del repositorio.
+
+- Agregar la dependencia Config Client. No olvidarse de añadir spring.config.import=configserver: al properties de products.
+
+- Crear un bootstrap.properties en products-service.
+
+<dependency>
+spring.application.name=products-service
+spring.cloud.config.uri=http://localhost:8888
+spring.profiles.active=dev
+</dependency>
+
+## Crear base de datos PostgreSQL <a name="id14"></a>
+
+MySQL es una base de datos puramente relacional, mientras que PostgreSQL es una base de datos relacional 
+de objetos. Esto significa que PostgreSQL ofrece tipos de datos más sofisticados y permite que los objetos 
+hereden propiedades. Por otro lado, también hace que sea más complejo trabajar con PostgreSQL.
+El usuario por defecto es postgres y en MySQL es root.
+
+- Instalación aqui: https://www.enterprisedb.com/downloads/postgres-postgresql-downloads
+- Abrir pgAdmin
+- Crear base de datos en PostgreSQL
+- Inyectar la dependencia PostgreSQL Driver en el microservicio.
+- Modificar el import porque hay algunos cambios respecto a MySQL. Quitar las comillas del nombre de las tablas. En los booleanos en PostgreSQL es true o false y en MySQL es con números.
+- Añadir la configuración en el servidor de configuración. Primero, inyectar en el microservicio la dependencia
+<dependency>
+			<groupId>org.springframework.cloud</groupId>
+			<artifactId>spring-cloud-starter-bootstrap</artifactId>
+</dependency>
+Añadir también la dependencia Spring Config Client.
+Después, agregar en el properties: spring.config.import=configserver:
+
+Crear el archivo users-service-dev.properties en el servidor de configuración que tendrá la configuración PostgreSQL:
+Crear el archivo bootstrap.properties en el microservicio:
+
+<pre><code>
+spring.application.name=users-service
+spring.cloud.config.uri=http://localhost:8888
+spring.profiles.active=dev
 </code></pre>
