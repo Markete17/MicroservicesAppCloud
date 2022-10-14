@@ -16,6 +16,7 @@ Formación en microservicios con Spring Cloud
 12. [Spring Cloud Security con Spring Cloud Gateway](#id12)
 13. [Migrar base de datos MySQL](#id13)
 14. [Crear base de datos PostgreSQL](#id14)
+15. [Trazabilidad distribuida con Spring Cloud Seuth y Zipkin](#id15)
 
 ## Rest Template y Feign Client<a name="id1"></a>
 Se usan para que un microservicio utilice otro microservicio.
@@ -2255,3 +2256,138 @@ spring.application.name=users-service
 spring.cloud.config.uri=http://localhost:8888
 spring.profiles.active=dev
 </code></pre>
+
+## Trazabilidad distribuida con Spring Cloud Seuth y Zipkin <a name="id15"></a>
+
+<b>1. Spring Cloud Sleuth</b> es una dependencia que nos provee una solución de trazado distribuido para Spring Cloud.
+Permite identificar la petición completa de un microservicio, como un todo, y en cada llamada individual a otros microservicios.
+Si un microservicio falla, se podría utilizar esta traza para ver más rapido el problema.
+
+<b>TraceId: </b>identificador asociado a la petición que viaja entre los microservicios
+<b>SpanId: </bidentificador de la unidad de trabajo de cada llamada a un microservicios.
+Entonces una traza está formado por un conjunto de spam.
+Ej: INFO[auth-server,8ad45a1c4d583805,f85ds3a2d6a2f5,false]
+INFO[Microservicio,traceId,spanId,parametro exportacion a Zipkin]
+
+<b>Atributos Annotation: </b> mide los tiempos de entrada y salida de cada petición, latencia y salud de los servicios:
+- cs(Client Sent): el cliente inicia una petición
+- sr(Server Received): El servidor recibe y procesa la petición: latencia = tiempo_sr - tiempo_cs
+- ss(Server Sent): La respuesta es enviada al servicio cliente: tºprocesamiento peticion = tiempo_ss - tiempo_sr
+- cr(Client Received): El cliente recibe la respuesta del servidor: tºtotal traza = tiempo_cr - tiempo_cs
+
+
+<b>2. Servidor Zipkin</b>
+- Servidor para guardar las trazas y monitorización
+- Integra las funcionalidades de Spring Cloud Sleuth
+- Interfaz gráfica para visualizar el árbol de llamada de cada traza
+- Su objeto es consultar la salud del ecosistema
+
+<b>Implementando Spring Cloud Sleuth</b>
+- Agregar la dependencia Sleuth a los microservicios que se quiera obtener las trazas.
+- Ahora por ejemplo, si se hace una petición en POSTMAN del Login, la trazabilidad muestra lo siguiente:
+
+INFO [zuul-service-server,663577dc1c01997c,663577dc1c01997c,true] POST request routed to http://localhost:8090/api/security/oauth/token 
+WARN [zuul-service-server,663577dc1c01997c,663577dc1c01997c,true] The Hystrix timeout of 10000ms for the command oauth-server is set lower than the combination of the Ribbon read and connect timeout, 126000ms.
+INFO [zuul-service-server,663577dc1c01997c,663577dc1c01997c,true] Enter to POST
+INFO [zuul-service-server,663577dc1c01997c,663577dc1c01997c,true] Time elapsed: 0.273 seconds.
+INFO [zuul-service-server,663577dc1c01997c,663577dc1c01997c,true] Time elapsed: 0.273 ms.
+
+Esta petición tiene el traceId= 663577dc1c01997c y en los demás microservicios en la consola tendrá este traceId y el spainId de la tarea que estén ejecutando como acceso a base de datos.
+
+<b>Obteniendo y despleando Zipkin Server y Zipkin UI</b>
+- Instalandolo: https://zipkin.io/pages/quickstart.html en Quickstart - Java - latest release
+- Ejecutarlo: java -jar java -jar zipkin-server-2.23.19-exec.jar
+- Acceder: http://localhost:9411/zipkin/
+- Conectar los microservicios con zipkin. Añadir la dependencia Zipkin Client
+- En cada microservicio, añadir la configuración Sleuth y Zipkin en el properties:
+
+<pre><code>
+spring:
+  application:
+    name: items-service
+  # Configuración sleuth y zipkin
+  sleuth:
+    sampler:
+      probability: 1.0 # 100% que la envie siempre
+  zipkin:
+    base-url: http://localhost:9411/ #opcional porque por defecto es esta ruta
+</code></pre>
+
+<pre><code>
+# Configuracion Sleuth/Zipkin
+spring.sleuth.sampler.probability=1.0 #Para establecer que siempre muestre la traza 100%
+</code></pre>
+
+Al hacer una petición en postman, se pueden visualizar las trazas en Zipkin. 
+En el buscador, se puede buscar la ruta mediante http.path=/oauth/token
+O buscar por microservicios con serviceName=xxx
+o por error: Error=400
+
+- Agregar información a la traza.
+
+Inyectar @Autowired Tracer de Brave y usarlo por ejemplo, en un catch cuando no encuentra al usuario:
+
+<pre><code>
+catch (FeignException e) {
+				logger.error("Error: username "+username+" not found.");
+				this.tracer.currentSpan().tag("error", "Error: username "+username+" not found." + e.getMessage());
+				throw new UsernameNotFoundException("Error: username "+username+" not found.");
+		}
+</code></pre>
+
+#### Instalar Broker Rabbit MQ - Consumidor de Trazas
+
+Para que se envíen las trazas por RabbitMQ.
+https://www.rabbitmq.com/#getstarted
+
+- Conectar los microservicios con RabbitMQ. Agregar la dependencia Spring for RabbitMQ.
+- Crear un documento cmd para configurar las variables de entorno para que Rabbit pueda consumir las trazas de Zipkin.
+zipkin.cmd
+<pre><code>
+@echo off
+set RABBIT_ADDRESSES=localhost:5672
+java -jar ./zipkin-server-2.23.19-exec.jar
+</code></pre>
+
+- Acceder a Rabbit: localhost:15672 y en connections se comprueba que está conectado a Zipkin
+- Añadir la configuración en el properties de los microservicios que se desea obtener sus trazas en Rabbit:
+
+<pre><code>
+spring.zipkin.sender.type=rabbit
+</code></pre>
+
+y asegurarse de que cada microservicio tenga las dependencias:
+
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-amqp</artifactId>
+		</dependency>
+		<dependency>
+			<groupId>org.springframework.cloud</groupId>
+			<artifactId>spring-cloud-sleuth-zipkin</artifactId>
+		</dependency>
+		<dependency>
+			<groupId>org.springframework.cloud</groupId>
+			<artifactId>spring-cloud-starter-sleuth</artifactId>
+		</dependency>
+		
+#### Configurando MySQL Storage en Zipkin Server
+
+- Acceder a https://github.com/openzipkin/zipkin/tree/master/zipkin-server#mysql-storage
+- Editar zipkin.cmd poniendo la nueva variable
+
+<pre><code>
+@echo off
+set RABBIT_ADDRESSES=localhost:5672
+set STORAGE_TYPE=mysql
+set MYSQL_USER=zipkin
+set MYSQL_PASS=zipkin
+java -jar ./zipkin-server-2.23.19-exec.jar
+</code></pre>
+
+-Crear una nueva base de datos en MySQL Workbench charset=utf8 y utf8 bin
+-Ir a user y privilegios y añadir el Login Name=zipkin, Standard, localhost, y las contraseñas. 
+Luego ir a la pestaña Schema Privilegies-Add Entry y seleccionar la base de datos Zipkin con privilegios de DELETE,EXECUTE,INSERT,SELECT,SHOW,VIEW,UPDATE
+-Con use zipkin se usa la base de datos zipkin creada.
+-Crear las tablas usando use zipkin arriba del todo: https://github.com/openzipkin/zipkin/blob/master/zipkin-storage/mysql-v1/src/main/resources/mysql.sql
+

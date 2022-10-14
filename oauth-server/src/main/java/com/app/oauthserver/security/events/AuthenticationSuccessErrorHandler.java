@@ -13,6 +13,7 @@ import org.springframework.stereotype.Component;
 import com.app.commonservice.models.entities.User;
 import com.app.oauthserver.services.IUserService;
 
+import brave.Tracer;
 import feign.FeignException;
 
 @Component
@@ -22,6 +23,9 @@ public class AuthenticationSuccessErrorHandler implements AuthenticationEventPub
 
 	@Autowired
 	private IUserService userService;
+	
+	@Autowired
+	private Tracer tracer;
 
 	@Override
 	public void publishAuthenticationSuccess(Authentication authentication) {
@@ -57,6 +61,10 @@ public class AuthenticationSuccessErrorHandler implements AuthenticationEventPub
 		logger.info(errorMessage);
 
 		try {
+			
+			StringBuilder errors = new StringBuilder();
+			errors.append("- "+errorMessage);
+			
 			User user = this.userService.findByUsername(authentication.getName());
 			if (user.getAttempts() == null) {
 				user.setAttempts(0);
@@ -68,14 +76,18 @@ public class AuthenticationSuccessErrorHandler implements AuthenticationEventPub
 			
 			logger.info("Then attemps: "+user.getAttempts());
 			
+			errors.append("- "+"Then attemps: "+user.getAttempts());
+			
 			
 			if(user.getAttempts()>=3) {
+				errors.append("- " + String.format("User %s disabled due to max attemps" , user.getUsername()));
 				logger.error(String.format("User %s disabled due to max attemps" , user.getUsername()));
 				user.setEnabled(false);
 			}
 			
 			this.userService.update(user, user.getId());
 			
+			tracer.currentSpan().tag("error.message", errors.toString());
 		} catch (FeignException e) {
 			logger.error(String.format("User %s does not exist", authentication.getName()));
 		}

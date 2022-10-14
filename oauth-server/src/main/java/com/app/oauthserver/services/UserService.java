@@ -16,6 +16,7 @@ import org.springframework.stereotype.Service;
 import com.app.commonservice.models.entities.User;
 import com.app.oauthserver.clients.UserFeignClient;
 
+import brave.Tracer;
 import feign.FeignException;
 
 @Service
@@ -23,6 +24,9 @@ public class UserService implements UserDetailsService,IUserService {
 
 	@Autowired
 	private UserFeignClient userFeignClient;
+	
+	@Autowired
+	private Tracer tracer;
 	
 	private Logger logger = LoggerFactory.getLogger(UserService.class);
 	
@@ -45,6 +49,7 @@ public class UserService implements UserDetailsService,IUserService {
 				true, true, true, authorities);
 		} catch (FeignException e) {
 				logger.error("Error: username "+username+" not found.");
+				this.tracer.currentSpan().tag("error", "Error: username "+username+" not found." + e.getMessage());
 				throw new UsernameNotFoundException("Error: username "+username+" not found.");
 		}
 	}
