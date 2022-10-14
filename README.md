@@ -2264,7 +2264,7 @@ Permite identificar la petición completa de un microservicio, como un todo, y e
 Si un microservicio falla, se podría utilizar esta traza para ver más rapido el problema.
 
 <b>TraceId: </b>identificador asociado a la petición que viaja entre los microservicios
-<b>SpanId: </bidentificador de la unidad de trabajo de cada llamada a un microservicios.
+<b>SpanId: </b>identificador de la unidad de trabajo de cada llamada a un microservicios.
 Entonces una traza está formado por un conjunto de spam.
 Ej: INFO[auth-server,8ad45a1c4d583805,f85ds3a2d6a2f5,false]
 INFO[Microservicio,traceId,spanId,parametro exportacion a Zipkin]
