@@ -1,0 +1,6 @@
+com\app\productservice\controllers\ProductController.class
+com\app\productservice\models\services\IProductService.class
+com\app\productservice\models\entities\Product.class
+com\app\productservice\ProductsServiceApplication.class
+com\app\productservice\models\dao\ProductDAO.class
+com\app\productservice\models\services\ProductServiceImpl.class

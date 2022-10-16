@@ -2,6 +2,8 @@ eureka:
   client:
     service-url:
       defaultZone: http://localhost:8761/eureka
+# Para Docker
+# defaultZone = http://eureka-server:8761/eureka
 server:
   port: 8002
 spring:
@@ -12,14 +14,18 @@ spring:
     sampler:
       probability: 1.0 # 100% que la envie siempre
   zipkin:
+    # base-url: http://zipkin-server:9411/ #Para docker
     base-url: http://localhost:9411/ # opcional porque por defecto es esta ruta
+  # Para Docker
+  # rabbitmq: 
+    # host: rabbitmq38
 # Timeouts con Hystrix (se comenta porque se usa Resillence4J)
 # Para los Timeouts, es necesario configurar los timpos de respuesta de Hystrix y Ribbon:
 # Importante! (Al agregar Zuul como API gateway, esta configuración va aquí y en zuul-server)
 
-## hystrix.command.default.execution.isolation.thread.timeoutInMilliseconds: 10000
-## ribbon.ConnectTimeout: 3000
-## ribbon.ReadTimeout: 60000
+hystrix.command.default.execution.isolation.thread.timeoutInMilliseconds: 60000
+ribbon.ConnectTimeout: 9000
+ribbon.ReadTimeout: 30000
 
 # Ribbon Configuration (comentado porque Eureka lo lleva integrado)
 # products-service.ribbon.listOfServers = localhost:8001,localhost:9001
@@ -60,6 +66,3 @@ resilience4j:
  
 #resilience4j.timelimiter.configs.defaultConfigItemsTimeout.timeout-duration=2s
 #resilience4j.timelimiter.instances.items.base-config=defaultConfigItemsTimeout
-
-
-# Configuracion Zipking

@@ -17,6 +17,7 @@ Formación en microservicios con Spring Cloud
 13. [Migrar base de datos MySQL](#id13)
 14. [Crear base de datos PostgreSQL](#id14)
 15. [Trazabilidad distribuida con Spring Cloud Seuth y Zipkin](#id15)
+16. [Desplegando microservicios en Docker](#id16)
 
 ## Rest Template y Feign Client<a name="id1"></a>
 Se usan para que un microservicio utilice otro microservicio.
@@ -1810,7 +1811,7 @@ la consiguración del cliente y la firma del token:
 <pre><code>
 config.security.oauth.client.id=postmanapp
 config.security.oauth.client.secret=12345
-config.security.oauth.jwt.key=key_secret
+config.security.oauth.jwt.key=2A281F235A1A61369C76AE1DAFA3A
 </code></pre>
 
 No olvidarse de hacer commit al repositorio de configuración.
@@ -2390,4 +2391,616 @@ java -jar ./zipkin-server-2.23.19-exec.jar
 Luego ir a la pestaña Schema Privilegies-Add Entry y seleccionar la base de datos Zipkin con privilegios de DELETE,EXECUTE,INSERT,SELECT,SHOW,VIEW,UPDATE
 -Con use zipkin se usa la base de datos zipkin creada.
 -Crear las tablas usando use zipkin arriba del todo: https://github.com/openzipkin/zipkin/blob/master/zipkin-storage/mysql-v1/src/main/resources/mysql.sql
+-Ir a Administración-Usuarios y Privilegios-Elegir usuario Zipkin y añadirle todos los privilegios SELECT,UPDATE,DELETE,etc.
 
+## Desplegando microservicios en Docker<a name="id16"></a>
+
+### Creando un DockerFile para el microservicio de configuración.
+
+1. Acceder al microservicio:
+
+<pre><code>
+cd ..../server-config
+</code></pre>
+
+2. Generar el jar
+
+<pre><code>
+.\mvnw clean package
+</code></pre>
+
+3. Generar el DockerFile
+Crear un archivo File llamado DockerFile dentro del paquete raíz del microservicio que tenga lo siguiente:
+
+<pre><code>
+FROM openjdk:11
+VOLUME /tmp
+EXPOSE 8888
+ADD ./target/config-server-0.0.1-SNAPSHOT.jar config-server.jar
+ENTRYPOINT ["java","-jar","config-server.jar"]
+</code></pre>
+
+FROM debe seleccionar una imagen de DockerHub: https://hub.docker.com/_/openjdk
+EXPOSE debe seleccionar el puerto en el que se va a ejecutar
+ADD debe seleccionar el archivo que se quiere ejecutar
+ENTRYPOINT debe seleccionar el comando a ejecutar para el archivo del ADD
+
+4. Construyendo la imagen Docker
+
+Ir con el cmd al archivo raiz del microservicio y ejecutar el comando <b>docker build -t config-server:v1 .</b>
+Con la -t se añade una tag como la version 1 (v1) y el espacio y punto final es importante añadirlo. 
+Con docker images se puede comprobar si la imagen se ha generado bien. Debería aparecer config-server y openjdk ejecutándose.
+
+5. Crear el contenedor de la imagen config-server
+El contenedor es una instancia de la imagen.
+Es necesario crear una red al contenedor con el comando: <b>docker network create springcloud</b>
+Con el comando <b>docker run -p 8888:8888 --name config-server --network springcloud config-server:v1</b> (primer numero para acceder desde el local y el otro numero es el puerto interno, el que viene en el properties)
+
+6. Ver los contenedores publicados:
+Con el comando <b>docker container ls</b> o <b>docker ps -a</b>
+
+### Creando un DockerFile para el microservicio de Eureka
+
+Acceder a la ruta del microservicio con la consola.
+
+1. Generar el jar con .\mvnw clean package
+
+2. El archivo DockerFile para el microservicio eureka-server sería el siguiente:
+<pre><code>
+FROM openjdk:11
+VOLUME /tmp
+EXPOSE 8761
+ADD ./target/eureka-server-0.0.1-SNAPSHOT.jar eureka-server.jar
+ENTRYPOINT ["java","-jar","eureka-server.jar"]
+</code></pre>
+
+3. Construir la imagen Docker
+Acceder al directorio raíz del microservicio y con el comando <b>docker build -t eureka-server:v1 .</b>
+
+4. Crear el contenedor de esta imagen
+
+Con el comando <b>docker run -p 8761:8761 --name eureka-server --network springcloud eureka-server:v1</b>
+Con el comando <b>docker logs -f <id container></b>
+
+### Instalar imagen MySQL con Docker
+
+1. Ir a DockerHub: https://hub.docker.com/_/mysql y ejecutar el comando <b>docker pull mysql:8</b>
+2. Crear el contenedor de la imagen: <b>docker run -p 3306:3306 --name mysql8 -network springcloud -e MYSQL_ROOT-PASSWORD=1234 -e MYSQL_DATABASE=db:springboot_cloud -d mysql:8</b>
+
+-d para que se ejecute en background
+Con -e se añaden las variables de entorno del contenedor. En este caso se utiliza la base de datos con nombre db:springboot_cloud y el usuario root con contraseña 1234
+Ahora en MySQL Workbench se puede acceder a esta conexión yendo a: New Connection:
+- Connection Name: docker mysql
+- Hostname: localhost port 3306
+- Username: root
+
+Y al connectarse se puede apreciar que se crea la base de datos db_springboot_cloud
+
+### Instalar imagen PostgreSQL con Docker
+
+1. Ir a DockerHub: https://hub.docker.com/_/postgres y ejecutar el comando <b>docker pull postgres:12-alpine</b>
+2. Crear el contenedor de la imagen: <b>docker run -p 5432:5432 --name postgres12 -network springcloud -e POSTGRES-PASSWORD=1234 -e POSTGRES_DB=db:springboot_cloud -d postgres:12-alpine</b>
+
+### Cambiar el repositorio de configuración para habilitar la base de datos con Docker
+
+- Primero ir al repositorio git de configuración y editar items-service.properties y products-service.properties
+- Con el comando docker ps se pueden ver los contenedores ejecutándose y fijarse en la columna name de los contenedores porque 
+hay que modificar la línea spring.datasource.url cambiando localhost por el nombre del contenedor.
+
+Para MySQL: products-service-dev.properties
+
+<pre><code>
+spring.datasource.url=jdbc:mysql://mysql8:3306/db_springboot_cloud?serverTimezone=Europe/Madrid
+spring.datasource.username=root
+spring.datasource.password=1234
+spring.datasource.driver-class-name=com.mysql.cj.jdbc.Driver
+spring.jpa.database-platform=org.hibernate.dialect.MySQL8Dialect
+spring.jpa.hibernate.ddl-auto=create
+
+# Debugear Hibernate
+logging.level.org.hibernate.SQL= debug
+</code></pre>
+
+Para PostgreSQL: users-service-dev.properties
+
+<pre><code>
+# MySQL Configuration
+spring.datasource.url=jdbc:postgresql://postgres12:5432/db_springboot_cloud
+spring.datasource.username=postgres
+spring.datasource.password=1234
+spring.datasource.driver-class-name=org.postgresql.Driver
+spring.jpa.database-platform=org.hibernate.dialect.PostgreSQL95Dialect
+spring.jpa.hibernate.ddl-auto=create
+spring.jpa.properties.hibernate.jdbc.lob.non_contextual_creation=true
+
+# Debugear Hibernate
+logging.level.org.hibernate.SQL= debug
+</code></pre>
+
+Por último, hacer el commit del repositorio y el push.
+
+### Configurando URL de Eureka y Server Config en microservicios
+
+Ejecutar docker ps para ver los contenedores levantados y ver la columna name para el servicio de eureka.
+Ir al application.properties de products-service y cambiar la url de eureka cambiando el localhost por el nombre del contenedor:
+
+<pre><code>
+eureka.client.service-url.defaultZone = http://localhost:8761/eureka
+
+Cambia por 
+
+eureka.client.service-url.defaultZone = http://eureka-server:8761/eureka
+</code></pre>
+
+Hacer lo mismo en cada microservicio.
+
+Como ahora hay varias imagenes e instancias es recomendable descomentar las líneas de configuración de Hystrix para items-service y zuul-server
+
+<pre><code>
+hystrix.command.default.execution.isolation.thread.timeoutInMilliseconds: 60000
+ribbon.ConnectTimeout: 9000
+ribbon.ReadTimeout: 30000
+</code></pre>
+
+Ahora es necesario cambiar el bootstrap.properties para cambiar el localhost por el nombre del contenedor del servidor de configuración:
+<pre><code>
+spring.application.name=users-service
+spring.cloud.config.uri=http://config-server:8888
+spring.profiles.active=dev
+</code></pre>
+
+### Crear DockerFile para products-service
+
+Acceder a la ruta del microservicio con la consola.
+
+1. Crear el jar con .\mvnw clean package -DskipTests
+Se aplica el -DskipTests para evitar que se conecte a mysql
+
+2. Crear el DockerFile
+
+<pre><code>
+FROM openjdk:11
+VOLUME /tmp
+ADD ./target/products-service-0.0.1-SNAPSHOT.jar products-service.jar
+ENTRYPOINT ["java","-jar","products-service.jar"]
+</code></pre>
+
+3. Construir la imagen Docker
+
+Con el comando <b>docker build -t products-service:v1 .</b>
+
+4. Crear el contenedor de esta imagen
+
+Como el puerto es aleatorio, se coloca -P y sin valor
+
+Con el comando <b>docker run -P --name products-service --network springcloud products-service:v1</b>
+
+### Crear DockerFile para zuul-server
+
+Acceder a la ruta del microservicio con la consola.
+
+1. Crear el jar con .\mvnw clean package -DskipTests
+Se aplica el -DskipTests para evitar que se conecte a eureka y al servidor de configuración
+
+2. Crear el DockerFile
+
+<pre><code>
+FROM openjdk:11
+VOLUME /tmp
+EXPOSE 8090
+ADD ./target/zuul-server-0.0.1-SNAPSHOT.jar zuul-server.jar
+ENTRYPOINT ["java","-jar","zuul-server.jar"]
+</code></pre>
+
+3. Construir la imagen Docker
+Acceder al directorio raíz del microservicio y con el comando <b>docker build -t zuul-server:v1 .</b>
+
+4. Crear el contenedor de esta imagen
+
+Como el puerto es aleatorio, se coloca -P y sin valor
+
+Con el comando <b>docker run -p 8090:8090 --name products-service --network springcloud products-service:v1</b>
+
+### Crear DockerFile para users-service
+
+Acceder a la ruta del microservicio con la consola.
+
+1. Crear el jar con .\mvnw clean package -DskipTests
+Se aplica el -DskipTests para evitar que se conecte a mysql
+
+2. Crear el DockerFile
+
+<pre><code>
+FROM openjdk:11
+VOLUME /tmp
+ADD ./target/users-service-0.0.1-SNAPSHOT.jar users-service.jar
+ENTRYPOINT ["java","-jar","users-service.jar"]
+</code></pre>
+
+3. Construir la imagen Docker
+
+Con el comando <b>docker build -t users-service:v1 .</b>
+
+4. Crear el contenedor de esta imagen
+
+Como el puerto es aleatorio, se coloca -P y sin valor
+
+Con el comando <b>docker run -P --name users-service --network springcloud users-service:v1</b>
+
+### Crear DockerFile para oauth-server
+
+Acceder a la ruta del microservicio con la consola.
+
+1. Crear el jar con .\mvnw clean package -DskipTests
+Se aplica el -DskipTests para evitar que se conecte a mysql
+
+2. Crear el DockerFile
+
+<pre><code>
+FROM openjdk:11
+VOLUME /tmp
+EXPOSE 9100
+ADD ./target/oauth-server-0.0.1-SNAPSHOT.jar oauth-server.jar
+ENTRYPOINT ["java","-jar","eureka-server.jar"]
+</code></pre>
+
+3. Construir la imagen Docker
+
+Con el comando <b>docker build -t oauth-server:v1 .</b>
+
+4. Crear el contenedor de esta imagen
+
+Con el comando <b>docker run -p --name oauth-server --network springcloud oauth-server:v1</b>
+
+### Crear DockerFile para items-service
+
+Acceder a la ruta del microservicio con la consola.
+
+1. Crear el jar con .\mvnw clean package -DskipTests
+Se aplica el -DskipTests para evitar que se conecte a mysql
+
+2. Crear el DockerFile
+
+<pre><code>
+FROM openjdk:11
+VOLUME /tmp
+EXPOSE 8002
+ADD ./target/items-service-0.0.1-SNAPSHOT.jar items-service.jar
+ENTRYPOINT ["java","-jar","items-service.jar"]
+</code></pre>
+
+3. Construir la imagen Docker
+
+Con el comando <b>docker build -t items-service:v1 .</b>
+
+4. Crear el contenedor de esta imagen
+
+Con el comando <b>docker run -p --name items-service --network springcloud items-service:v1</b>
+
+
+### Crear varias instancias para products-service con Docker
+
+Con el comando <b>docker run -P --name products-service2 --network springcloud products-service:v1</b>
+Se va a levantar otra instancia de productos.
+Con docker ps se puede apreciar que habrá dos instancias
+Para borrar la instancia: <b>docker rm <id container></b>
+
+### Crear una imagen para RabbitMQ para Rabbit
+
+- Ir al DockerHub: https://hub.docker.com/_/rabbitmq
+- Ejecutar el comando <b>docker pull rabbitmq:3.8-management-alpine</b>
+- Comprobar que esté instalada con docker images
+- Crear un contenedor para esta imagen con el comando:
+<pre><code>
+docker run -p 15672:15672 -p 5672:5672 --name rabbitmq38 --network springcloud -d rabbitmq:3.8-management-alpine
+</code></pre>
+
+### Configurando esquema DDL de zipkin para mysql
+
+1. Conectarse a MySQL Workbench a la conexión de Docker
+2. Crear una base de datos para zipkin llamada "zipkin" con configuración utf8 y utf8_general_ci
+3. Crear un usuario en Administración - Usuarios y Privilegios - Agregar una cuenta - Login Name: zipkin y Password: zipkin
+4. Crear las tablas usando use zipkin arriba del todo: https://github.com/openzipkin/zipkin/blob/master/zipkin-storage/mysql-v1/src/main/resources/mysql.sql
+5. Ir a Administración-Usuarios y Privilegios-Elegir usuario Zipkin y añadirle todos los privilegios SELECT,UPDATE,DELETE,etc.
+
+### Crear un DockerFile para zipkin
+
+1. Crear una carpeta en el workspace del proyecto llamado zipkin-server en el que se va a añadir el jar zipkin.
+2. Crear el archivo DockerFile en esta carpeta.
+
+<pre><code>
+FROM openjdk:11
+VOLUME /tmp
+EXPOSE 9411
+ADD ./zipkin-server-2.23.19-exec.jar zipkin-server.jar
+ENTRYPOINT ["java","-jar","zipkin-server.jar"]
+</code></pre>
+
+3. Crear la imagen Zipkin.
+
+Ir al terminal, al directorio zipkin-server y ejecutar:
+<pre><code>
+docker build -t zipkin-server:v1
+</code></pre>
+
+4. Construir el contenedor
+
+Teniendo el archivo zipkin.cmd:
+<pre><code>
+@echo off
+set RABBIT_ADDRESSES=localhost:5672
+set STORAGE_TYPE=mysql
+set MYSQL_USER=zipkin
+set MYSQL_PASS=zipkin
+java -jar ./zipkin-server-2.23.19-exec.jar
+</code></pre>
+
+Se construye el contenedor con estas variables de entorno pero sustituyendo localhost por el nombre de los contenedores.
+<pre><code>
+docker run -p 9411:9411 --name zipkin-server --network springcloud -e RABBIT_ADDRESSES=rabbitmq38:5672 -e STORAGE_TYPE=mysql -e  MYSQL_USER=zipkin -e set MYSQL_PASS=zipkin zipkin-server:v1
+</code></pre>
+
+### Configurar nombre host de RabbitMQ
+
+La configuración de Zipkin en los properties de los microservicios se necesita cambiar el localhost por el nombre del contenedor.
+
+<pre><code>
+  zipkin:
+    base-url: http://zipkin-server:9411/ #Para docker
+  # Para Docker
+  rabbitmq: 
+    host: rabbitmq38
+</code></pre>
+
+<pre><code>
+spring.zipkin.base-url=http://zipkin-server:9411/
+spring.rabbitmq.host=rabbitmq38
+</code></pre>
+
+Pero para no tener que volver a generar los jar para cada microservicio se va a crear un nuevo archivo en el repositorio de configuración
+Editando el application.properties:
+
+<pre><code>
+config.security.oauth.client.id=postmanapp
+config.security.oauth.client.secret=12345
+config.security.oauth.jwt.key=2A281F235A1A61369C76AE1DAFA3A
+
+spring.zipkin.base-url=http://zipkin-server:9411/
+spring.rabbitmq.host=rabbitmq38
+</code></pre>
+
+No olvidarse de commit y push.
+
+Con docker restar <id contenedor> se reiniciaran los contenedores de los microservicios para que adquieran esta nueva configuración.
+
+### Despliegue de contenedores con docker-compose
+
+En vez de ejecutar el docker-run se puede crear este archivo para ejecutar los contenedores.
+
+1. Ir al directorio raíz de la aplicación y crear un nuevo directorio llamado docker-compose
+2. Crear un archivo docker-compose.yml con el siguiente contenido:
+
+<pre><code>
+version: '3.7'
+services:
+  config-server:
+    image: config-server:v1
+    ports:
+      - "8888:8888"
+    restart: always
+    networks:
+      - springcloud
+  eureka-server:
+    image: eureka-server:v1
+    ports:
+      - "8761:8761"
+    restart: always
+    networks:
+      - springcloud
+  mysql8:
+    image: mysql:8
+    ports:
+      - "3306:3306"
+    restart: always
+    networks:
+      - springcloud
+    environment: 
+      MYSQL_DATABASE: db_springboot_cloud
+      MYSQL_ROOT_PASSWORD: 1234
+  postgres12:
+    image: postgres:12-alpine
+    ports:
+      - "5432:5432"
+    restart: always
+    networks:
+      - springcloud
+    environment: 
+      POSTGRES_DB: db_springboot_cloud
+      POSTGRES_PASSWORD: 1234
+  products-service:
+    image: products-service:v1
+    restart: always
+    networks:
+      - springcloud
+    depends_on: 
+      - config-server
+      - eureka-server
+      - mysql8
+  items-service:
+    image: items-service:v1
+    ports:
+      - "8002:8002"
+      - "8005:8005"
+      - "8007:8007"
+    restart: always
+    networks:
+      - springcloud
+    depends_on: 
+      - config-server
+      - eureka-server
+      - products-service
+   users-service:
+    image: users-service:v1
+    restart: always
+    networks:
+      - springcloud
+    depends_on: 
+      - config-server
+      - eureka-server
+      - postgres12
+   oauth-server:
+    image: oauth-server:v1
+    ports:
+      - "9100:9100"
+    restart: always
+    networks:
+      - springcloud
+    depends_on: 
+      - config-server
+      - eureka-server
+      - users-service
+  zuul-server:
+    image: zuul-server:v1
+    ports:
+      - "8090:8090"
+    restart: always
+    networks:
+      - springcloud
+    depends_on: 
+      - config-server
+      - eureka-server
+      - products-service
+      - items-service
+      - users-service
+      - oauth-server
+  rabbitmq38:
+    image: rabbitmq:3.8-management-alpine
+    ports:
+      - "15672:15672"
+      - "5672:5672"
+    restart: always
+    networks:
+      - springcloud
+  zipkin-server:
+    image: zipkin-server:v1
+    ports:
+      - "9411:9411"
+    restart: always
+    networks:
+      - springcloud
+    depends_on: 
+      - rabbitmq38
+      - mysql8
+    environment: 
+      RABBIT_ADDRESSES: microservicios-rabbitmq38:5672
+      STORAGE_TYPE: mysql
+      MYSQL_USER: zipkin
+      MYSQL_PASS: zipkin
+      MYSQL_HOST: mysql8
+networks:
+  springcloud:
+</code></pre>
+
+3. Ir al directorio docker-compose y levantar con el comando docker-compose up
+
+
+### LISTA DE COMANDOS DOCKER
+
+<pre><code>
+======================== config-server
+
+.\mvnw clean package
+ 
+docker build -t config-server:v1 .
+docker network create spring-microservicios
+docker run -p 8888:8888 --name config-server --network springcloud config-server:v1
+
+
+======================== servicio-eureka-server
+
+.\mvnw clean package
+ 
+docker build -t servicio-eureka-server:v1 .
+docker run -p 8761:8761 --name servicio-eureka-server --network springcloud servicio-eureka-server:v1
+======================== mysql
+
+docker pull mysql:8
+docker run -p 3306:3306 --name microservicios-mysql8 --network springcloud -e MYSQL_ROOT_PASSWORD=sasa -e MYSQL_DATABASE=db_springboot_cloud -d mysql:8
+docker logs -f microservicios-mysql8
+
+
+======================== postgresql
+
+docker pull postgres:12-alpine
+docker run -p 5432:5432 --name microservicios-postgres12 --network springcloud -e POSTGRES_PASSWORD=sasa -e POSTGRES_DB=db_springboot_cloud -d postgres:12-alpine
+docker logs -f microservicios-postgres12
+
+
+======================== springboot-servicio-productos
+
+.\mvnw clean package -DskipTests
+ 
+docker build -t servicio-productos:v1 .
+docker run -P --network springcloud servicio-productos:v1
+
+
+======================== springboot-servicio-zuul-server
+
+.\mvnw clean package -DskipTests
+ 
+docker build -t servicio-zuul-server:v1 .
+docker run -p 8090:8090 --network springcloud servicio-zuul-server:v1
+
+
+======================== springboot-servicio-usuarios
+
+.\mvnw clean package -DskipTests
+ 
+docker build -t servicio-usuarios:v1 .
+docker run -P --network springcloud servicio-usuarios:v1
+
+
+======================== springboot-servicio-oauth
+
+.\mvnw clean package -DskipTests
+ 
+docker build -t servicio-oauth:v1 .
+docker run -p 9100:9100 --network springcloud servicio-oauth:v1
+
+
+======================== springboot-servicio-item
+
+.\mvnw clean package -DskipTests
+ 
+docker build -t servicio-items:v1 .
+docker run -p 8002:8002 -p 8005:8005 -p 8007:8007 --network springcloud servicio-items:v1
+
+
+======================== rabbitmq
+
+docker pull rabbitmq:3.8-management-alpine
+docker run -p 15672:15672 -p 5672:5672 --name microservicios-rabbitmq38 --network springcloud -d rabbitmq:3.8-management-alpine
+ 
+docker logs -f microservicios-rabbitmq38
+
+
+======================== zipkin
+
+docker build -t zipkin-server:v1 .
+docker run -p 9411:9411 --name zipkin-server --network springcloud -e RABBIT_ADDRESSES=microservicios-rabbitmq38:5672 -e STORAGE_TYPE=mysql -e MYSQL_USER=zipkin -e MYSQL_PASS=zipkin -e MYSQL_HOST=microservicios-mysql8 zipkin-server:v1
+docker logs -f zipkin-server
+
+
+======================== Otros comandos
+
+detener y eliminar todos los contenedores:
+
+docker stop $(docker ps -q)
+docker rm $(docker ps -a -q)
+
+
+eliminar todas las imagenes:
+
+docker rmi $(docker images -a -q)
+
+</code></pre>
